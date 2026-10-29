@@ -63,7 +63,7 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
 
   const totalStorageBytes = files.reduce((acc, f) => acc + f.size, 0);
   const totalStorageMB = (totalStorageBytes / (1024 * 1024)).toFixed(2);
-  const quotaMB = 500; // Conforme au cahier des charges (500 Mo max par équipe)
+  const quotaMB = 500; 
   const quotaPercent = Math.min(100, Math.round(((parseFloat(totalStorageMB)) / quotaMB) * 100));
 
   return (
