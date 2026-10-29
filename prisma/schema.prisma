@@ -1,0 +1,344 @@
+// StudyFlow Prisma Schema - Modèle de données complet (21 entités du Cahier des Charges v1.0)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// MODULE 1 : AUTHENTIFICATION & ÉQUIPES (Dev 1)
+// ==========================================
+
+model User {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  passwordHash  String?
+  image         String?
+  createdAt     DateTime     @default(now())
+
+  // Relations
+  teamMembers   TeamMember[]
+  tasksCreated  Task[]       @relation("TaskCreator")
+  assignedTasks TaskAssignee[]
+  messages      Message[]
+  notifications Notification[]
+  activities    Activity[]
+  calendarTokens CalendarToken[]
+  reminders     Reminder[]
+  filesUploaded File[]
+  reportsCreated Report[]
+}
+
+model Team {
+  id              String       @id @default(cuid())
+  name            String
+  description     String?
+  slug            String       @unique
+  ownerId         String
+  inviteToken     String       @unique
+  inviteExpiresAt DateTime?
+  createdAt       DateTime     @default(now())
+
+  // Relations
+  members         TeamMember[]
+  projects        Project[]
+  channels        Channel[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      String   @default("MEMBER") // OWNER, ADMIN, MEMBER, VIEWER
+  joinedAt  DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+// ==========================================
+// MODULE 2 : TABLEAUX KANBAN (Dev 2)
+// ==========================================
+
+model Project {
+  id          String            @id @default(cuid())
+  teamId      String
+  name        String
+  description String?
+  color       String            @default("#4f46e5")
+  startDate   DateTime?
+  endDate     DateTime?
+  archivedAt  DateTime?
+
+  team        Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  columns     Column[]
+  tasks       Task[]
+  labels      Label[]
+  milestones  Milestone[]
+  channels    Channel[]
+  folders     Folder[]
+  files       File[]
+  activities  Activity[]
+  snapshots   ProjectSnapshot[]
+  reports     Report[]
+}
+
+model Column {
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String
+  position   Float    // Ordonnancement par fractional indexing
+  wipLimit   Int?     // Limite de travail en cours
+  isDone     Boolean  @default(false)
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+}
+
+model ProjectTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  columns     String   // Stocké en JSON string : noms et couleurs par défaut
+}
+
+// ==========================================
+// MODULE 3 : TÂCHES & ASSIGNATIONS (Dev 3)
+// ==========================================
+
+model Task {
+  id          String         @id @default(cuid())
+  projectId   String
+  columnId    String
+  title       String
+  description String?
+  position    Float          // Fractional indexing
+  priority    String         @default("NORMALE") // BASSE, NORMALE, HAUTE, URGENTE
+  dueDate     DateTime?
+  createdById String
+  createdAt   DateTime       @default(now())
+  completedAt DateTime?
+  archivedAt  DateTime?
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column      Column         @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  creator     User           @relation("TaskCreator", fields: [createdById], references: [id])
+  
+  subtasks    Subtask[]
+  assignees   TaskAssignee[]
+  labels      TaskLabel[]
+  reminders   Reminder[]
+  files       File[]
+  activities  Activity[]
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String
+  title     String
+  done      Boolean  @default(false)
+  position  Int      @default(0)
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model Label {
+  id        String      @id @default(cuid())
+  projectId String
+  name      String
+  color     String
+
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     TaskLabel[]
+}
+
+model TaskAssignee {
+  taskId    String
+  userId    String
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+}
+
+model TaskLabel {
+  taskId    String
+  labelId   String
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+}
+
+// ==========================================
+// MODULE 4 : CALENDRIER & ÉCHÉANCES (Dev 4)
+// ==========================================
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  date        DateTime
+  description String?
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Reminder {
+  id        String    @id @default(cuid())
+  taskId    String
+  userId    String
+  remindAt  DateTime
+  kind      String    @default("H24") // H24, H1
+  sentAt    DateTime?
+
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CalendarToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// MODULE 5 : CHAT & NOTIFICATIONS (Dev 5)
+// ==========================================
+
+model Channel {
+  id        String    @id @default(cuid())
+  teamId    String
+  projectId String?
+  taskId    String?
+  name      String
+  type      String    @default("PROJECT") // TEAM, PROJECT, TASK
+
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  channelId String
+  authorId  String
+  content   String
+  replyToId String?
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String    // ASSIGNMENT, COMMENT, MENTION, DUE_SOON, AI_ALERT
+  payload   String    // JSON string
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// MODULE 6 : PARTAGE DE FICHIERS (Dev 6)
+// ==========================================
+
+model File {
+  id             String        @id @default(cuid())
+  projectId      String
+  taskId         String?
+  folderId       String?
+  uploaderId     String
+  name           String
+  mimeType       String
+  size           Int
+  currentVersion Int           @default(1)
+  createdAt      DateTime      @default(now())
+
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  folder         Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  uploader       User          @relation(fields: [uploaderId], references: [id])
+  versions       FileVersion[]
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  projectId String
+  parentId  String?
+  name      String
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  files     File[]
+}
+
+model FileVersion {
+  id         String   @id @default(cuid())
+  fileId     String
+  version    Int
+  storageKey String
+  size       Int
+  uploaderId String
+  createdAt  DateTime @default(now())
+
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// MODULE 7 : STATISTIQUES & RAPPORTS (Dev 7)
+// ==========================================
+
+model Activity {
+  id        String   @id @default(cuid())
+  projectId String
+  taskId    String?
+  userId    String
+  type      String   // TASK_CREATED, TASK_MOVED, TASK_COMPLETED, FILE_UPLOADED, etc.
+  payload   String   // JSON string
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProjectSnapshot {
+  id        String   @id @default(cuid())
+  projectId String
+  date      DateTime @default(now())
+  total     Int
+  done      Int
+  overdue   Int
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  projectId   String
+  createdById String
+  periodStart DateTime
+  periodEnd   DateTime
+  data        String   // JSON string
+  createdAt   DateTime @default(now())
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator     User     @relation(fields: [createdById], references: [id])
+}

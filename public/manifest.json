@@ -1,0 +1,55 @@
+{
+  "name": "StudyFlow - Gestion de Projet Étudiant",
+  "short_name": "StudyFlow",
+  "description": "Application collaborative de gestion de projet mobile-first pour équipes étudiantes.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "scope": "/",
+  "categories": ["productivity", "education"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tableau Kanban",
+      "short_name": "Kanban",
+      "description": "Accéder directement au tableau des tâches",
+      "url": "/?view=kanban",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Calendrier & Jalons",
+      "short_name": "Calendrier",
+      "description": "Consulter les échéances et soutenances",
+      "url": "/?view=calendar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Assistant IA",
+      "short_name": "Assistant IA",
+      "description": "Découper des tâches et analyser le projet",
+      "url": "/?view=ai",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
