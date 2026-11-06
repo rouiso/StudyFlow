@@ -1,10 +1,11 @@
 import { prisma } from './prisma';
 
-export type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+export type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'COACH' | 'VIEWER';
 
 const ROLE_HIERARCHY: Record<Role, number> = {
-  OWNER: 4,
-  ADMIN: 3,
+  OWNER: 5,
+  ADMIN: 4,
+  COACH: 3,
   MEMBER: 2,
   VIEWER: 1,
 };
@@ -79,7 +80,26 @@ export async function requireProjectAccess(projectId: string): Promise<boolean> 
 }
 
 /**
- * Assertion stricte de permission conformément au §4.2 du Cahier des Charges
+ * Vérifie si l'utilisateur courant est Coach de l'équipe (Module 1 - v1.1)
+ */
+export async function requireCoach(teamId: string): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  const member = await prisma.teamMember.findUnique({
+    where: {
+      teamId_userId: {
+        teamId,
+        userId: user.id,
+      },
+    },
+  });
+
+  return member?.role === 'COACH';
+}
+
+/**
+ * Assertion stricte de permission conformément au §4.2 du Cahier des Charges v1.1
  */
 export async function assertPermission(action: string, context: { teamId?: string; projectId?: string }) {
   if (context.projectId) {
@@ -90,9 +110,15 @@ export async function assertPermission(action: string, context: { teamId?: strin
   }
 
   if (context.teamId) {
-    const { authorized } = await requireTeamRole(context.teamId, 'MEMBER');
+    const { authorized, memberRole } = await requireTeamRole(context.teamId, 'MEMBER');
     if (!authorized) {
       throw new Error(`Permission insuffisante pour l'action : ${action}`);
+    }
+
+    // Règle v1.1 : Le Coach ne peut pas créer, déplacer ou modifier des tâches
+    const taskWriteActions = ['create_task', 'move_task', 'update_task', 'delete_task', 'reorder_tasks'];
+    if (taskWriteActions.includes(action) && (memberRole === 'COACH' || memberRole === 'VIEWER')) {
+      throw new Error(`Action interdite pour le rôle ${memberRole} : les tâches ne peuvent être modifiées que par les membres contributeurs`);
     }
   }
 }

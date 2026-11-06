@@ -1,14 +1,30 @@
-node_modules/
-.next/
-out/
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-.env
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
 .env*.local
 
-prisma/*.db
-prisma/*.db-journal
-dev.db
-dev.db-journal
-uploads/
-
-npm-debug.log*
+# typescript
+*.tsbuildinfo
+next-env.d.ts

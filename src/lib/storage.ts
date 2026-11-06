@@ -13,6 +13,12 @@ import {
   FileItem,
   Activity,
   ProjectReport,
+  Training,
+  TrainingEnrollment,
+  CoachingSession,
+  CoachingGoal,
+  SkillLevel,
+  Feedback,
 } from '@/types';
 
 export interface StudyFlowData {
@@ -31,9 +37,16 @@ export interface StudyFlowData {
   files: FileItem[];
   activities: Activity[];
   reports: ProjectReport[];
+  // Module 7 : Formations & Coaching (v1.1)
+  trainings: Training[];
+  enrollments: TrainingEnrollment[];
+  coachingSessions: CoachingSession[];
+  coachingGoals: CoachingGoal[];
+  skillLevels: SkillLevel[];
+  feedbacks: Feedback[];
 }
 
-const STORAGE_KEY = 'studyflow_data_v1.0';
+const STORAGE_KEY = 'studyflow_data_v1.1';
 
 // Seed data initial fidèle au cahier des charges StudyFlow
 export const initialData: StudyFlowData = {
@@ -83,7 +96,7 @@ export const initialData: StudyFlowData = {
       name: 'Mme Dupont',
       email: 'helene.dupont@univ-prof.fr',
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      role: 'VIEWER',
+      role: 'COACH',
       joinedAt: '2026-09-05T09:00:00Z',
     },
   ],
@@ -103,7 +116,7 @@ export const initialData: StudyFlowData = {
     { id: 'tm-2', teamId: 'team-1', userId: 'user-2', role: 'ADMIN', joinedAt: '2026-09-01T08:15:00Z' },
     { id: 'tm-3', teamId: 'team-1', userId: 'user-3', role: 'MEMBER', joinedAt: '2026-09-02T10:00:00Z' },
     { id: 'tm-4', teamId: 'team-1', userId: 'user-4', role: 'MEMBER', joinedAt: '2026-09-03T14:30:00Z' },
-    { id: 'tm-5', teamId: 'team-1', userId: 'user-5', role: 'VIEWER', joinedAt: '2026-09-05T09:00:00Z' },
+    { id: 'tm-5', teamId: 'team-1', userId: 'user-5', role: 'COACH', joinedAt: '2026-09-05T09:00:00Z' },
   ],
   projects: [
     {
@@ -431,6 +444,214 @@ export const initialData: StudyFlowData = {
       ],
     },
   ],
+  // MODULE 7 : Formations & Coaching (v1.1)
+  trainings: [
+    {
+      id: 'tr-1',
+      teamId: 'team-1',
+      title: 'Introduction à Prisma & Bases Relationnelles',
+      description: 'Modélisation relationnelle, migrations, contraintes d’intégrité et transactions concurrentes sous Next.js 15.',
+      skill: 'Prisma & BDD',
+      level: 'BEGINNER',
+      trainerId: 'user-5',
+      startsAt: '2026-11-10T14:00:00Z',
+      endsAt: '2026-11-10T16:00:00Z',
+      capacity: 4,
+      mode: 'ONLINE',
+      meetingUrl: 'https://meet.jit.si/studyflow-prisma',
+      status: 'PUBLISHED',
+      createdAt: '2026-10-20T10:00:00Z',
+    },
+    {
+      id: 'tr-2',
+      teamId: 'team-1',
+      title: 'Architecture Next.js App Router & Server Actions',
+      description: 'Pattern de composants serveurs, mutations sécurisées avec Zod et gestion optimiste du cache.',
+      skill: 'Next.js 15',
+      level: 'INTERMEDIATE',
+      trainerId: 'user-5',
+      startsAt: '2026-11-14T10:00:00Z',
+      endsAt: '2026-11-14T12:00:00Z',
+      capacity: 8,
+      mode: 'ONLINE',
+      meetingUrl: 'https://meet.jit.si/studyflow-nextjs',
+      status: 'PUBLISHED',
+      createdAt: '2026-10-22T09:00:00Z',
+    },
+    {
+      id: 'tr-3',
+      teamId: 'team-1',
+      title: 'Atelier Pratique : Service Workers & Cache PWA',
+      description: 'Mise en œuvre concrète des stratégies Network First et Stale While Revalidate sur mobile.',
+      skill: 'PWA & Mobile',
+      level: 'ADVANCED',
+      trainerId: 'user-2',
+      startsAt: '2026-11-18T15:00:00Z',
+      endsAt: '2026-11-18T17:00:00Z',
+      capacity: 6,
+      mode: 'ONSITE',
+      location: 'Salle TP 304 - Bâtiment Informatique',
+      status: 'PUBLISHED',
+      createdAt: '2026-10-24T14:00:00Z',
+    },
+  ],
+  enrollments: [
+    // Formation 1 complète (4/4)
+    { id: 'enr-1', trainingId: 'tr-1', userId: 'user-1', status: 'ENROLLED', attended: true, enrolledAt: '2026-10-21T08:00:00Z' },
+    { id: 'enr-2', trainingId: 'tr-1', userId: 'user-2', status: 'ENROLLED', attended: true, enrolledAt: '2026-10-21T08:30:00Z' },
+    { id: 'enr-3', trainingId: 'tr-1', userId: 'user-3', status: 'ENROLLED', attended: true, enrolledAt: '2026-10-21T09:00:00Z' },
+    { id: 'enr-4', trainingId: 'tr-1', userId: 'user-4', status: 'ENROLLED', attended: false, enrolledAt: '2026-10-21T09:15:00Z' },
+    // Formation 2 (2/8)
+    { id: 'enr-5', trainingId: 'tr-2', userId: 'user-2', status: 'ENROLLED', attended: false, enrolledAt: '2026-10-23T11:00:00Z' },
+    { id: 'enr-6', trainingId: 'tr-2', userId: 'user-3', status: 'ENROLLED', attended: false, enrolledAt: '2026-10-23T12:00:00Z' },
+    // Formation 3 (2/6)
+    { id: 'enr-7', trainingId: 'tr-3', userId: 'user-1', status: 'ENROLLED', attended: false, enrolledAt: '2026-10-25T16:00:00Z' },
+    { id: 'enr-8', trainingId: 'tr-3', userId: 'user-4', status: 'ENROLLED', attended: false, enrolledAt: '2026-10-25T17:00:00Z' },
+  ],
+  coachingSessions: [
+    {
+      id: 'cs-1',
+      teamId: 'team-1',
+      projectId: 'proj-1',
+      coachId: 'user-5',
+      coacheeId: 'user-2',
+      topic: 'Revue architecture de persistance et cache offline',
+      proposedSlots: ['2026-11-05T14:00:00Z'],
+      scheduledAt: '2026-11-05T14:00:00Z',
+      durationMin: 45,
+      mode: 'ONLINE',
+      meetingUrl: 'https://meet.jit.si/coaching-karim-dupont',
+      status: 'DONE',
+      sharedReport: 'Validation du découpage par modules. Karim maîtrise les stratégies de mise en cache Service Worker et les requêtes optimistes.',
+      privateNotes: 'Karim est très autonome et moteur dans le groupe. Solide progression sur le local-first.',
+      createdAt: '2026-10-23T10:00:00Z',
+    },
+    {
+      id: 'cs-2',
+      teamId: 'team-1',
+      projectId: 'proj-1',
+      coachId: 'user-5',
+      coacheeId: 'user-3',
+      topic: 'Résolution des conflits Prisma et gestion des clés composites',
+      proposedSlots: ['2026-11-12T11:00:00Z', '2026-11-12T15:00:00Z'],
+      scheduledAt: '2026-11-12T11:00:00Z',
+      durationMin: 30,
+      mode: 'ONLINE',
+      meetingUrl: 'https://meet.jit.si/coaching-sami-dupont',
+      status: 'CONFIRMED',
+      sharedReport: 'Point technique calé pour valider les relations n-à-n du module 3.',
+      privateNotes: 'Rassurer Sami sur la syntaxe des jointures Prisma.',
+      createdAt: '2026-10-24T14:30:00Z',
+    },
+    {
+      id: 'cs-3',
+      teamId: 'team-1',
+      projectId: 'proj-1',
+      coachId: 'user-5',
+      coacheeId: 'user-4',
+      topic: 'Audit accessibilité WCAG AA et fluidité tactile mobile',
+      proposedSlots: ['2026-11-15T09:30:00Z', '2026-11-16T14:00:00Z'],
+      durationMin: 45,
+      mode: 'ONLINE',
+      status: 'REQUESTED',
+      createdAt: '2026-10-25T11:00:00Z',
+    },
+    {
+      id: 'cs-4',
+      teamId: 'team-1',
+      projectId: 'proj-1',
+      coachId: 'user-5',
+      coacheeId: 'user-1',
+      topic: 'Cadrage de soutenance et répartition d’équipe',
+      proposedSlots: ['2026-11-08T16:00:00Z'],
+      scheduledAt: '2026-11-09T10:00:00Z',
+      durationMin: 60,
+      mode: 'ONSITE',
+      location: 'Bureau B214 - Département Informatique',
+      status: 'RESCHEDULED',
+      sharedReport: 'Créneau décalé pour s’adapter aux disponibilités des 7 membres.',
+      privateNotes: 'Léa fait preuve d’un excellent leadership d’équipe.',
+      createdAt: '2026-10-22T17:00:00Z',
+    },
+  ],
+  coachingGoals: [
+    {
+      id: 'cg-1',
+      userId: 'user-2',
+      teamId: 'team-1',
+      coachId: 'user-5',
+      title: 'Maîtriser les Service Workers et le cache PWA offline',
+      skill: 'PWA & Mobile',
+      targetDate: '2026-11-20',
+      progress: 85,
+      status: 'OPEN',
+      createdAt: '2026-10-15T09:00:00Z',
+    },
+    {
+      id: 'cg-2',
+      userId: 'user-3',
+      teamId: 'team-1',
+      coachId: 'user-5',
+      title: 'Concevoir des schémas relationnels sans anomalie de mise à jour',
+      skill: 'Prisma & BDD',
+      targetDate: '2026-11-25',
+      progress: 50,
+      status: 'OPEN',
+      createdAt: '2026-10-16T10:00:00Z',
+    },
+    {
+      id: 'cg-3',
+      userId: 'user-4',
+      teamId: 'team-1',
+      coachId: 'user-5',
+      title: 'Atteindre le niveau d’accessibilité WCAG 2.1 AA sur mobile',
+      skill: 'Accessibilité & UI',
+      targetDate: '2026-11-15',
+      progress: 100,
+      status: 'ACHIEVED',
+      createdAt: '2026-10-18T14:00:00Z',
+    },
+    {
+      id: 'cg-4',
+      userId: 'user-1',
+      teamId: 'team-1',
+      coachId: 'user-5',
+      title: 'Piloter un projet agile à 7 développeurs et coordonner la recette',
+      skill: 'Gestion Agile',
+      targetDate: '2026-12-01',
+      progress: 75,
+      status: 'OPEN',
+      createdAt: '2026-10-12T08:00:00Z',
+    },
+  ],
+  skillLevels: [
+    { id: 'sk-1', userId: 'user-2', teamId: 'team-1', skill: 'Next.js 15', level: 4, selfAssessed: false, assessedById: 'user-5', updatedAt: '2026-10-25' },
+    { id: 'sk-2', userId: 'user-2', teamId: 'team-1', skill: 'PWA & Mobile', level: 5, selfAssessed: false, assessedById: 'user-5', updatedAt: '2026-10-25' },
+    { id: 'sk-3', userId: 'user-2', teamId: 'team-1', skill: 'Prisma & BDD', level: 4, selfAssessed: true, updatedAt: '2026-10-20' },
+    { id: 'sk-4', userId: 'user-3', teamId: 'team-1', skill: 'Prisma & BDD', level: 3, selfAssessed: false, assessedById: 'user-5', updatedAt: '2026-10-24' },
+    { id: 'sk-5', userId: 'user-4', teamId: 'team-1', skill: 'Accessibilité & UI', level: 5, selfAssessed: false, assessedById: 'user-5', updatedAt: '2026-10-26' },
+    { id: 'sk-6', userId: 'user-1', teamId: 'team-1', skill: 'Gestion Agile', level: 5, selfAssessed: false, assessedById: 'user-5', updatedAt: '2026-10-25' },
+  ],
+  feedbacks: [
+    {
+      id: 'fb-1',
+      targetType: 'TRAINING',
+      targetId: 'tr-1',
+      authorId: 'user-2',
+      rating: 5,
+      comment: 'Excellente session pratique, les exercices sur les transactions Prisma ont débloqué notre architecture.',
+      createdAt: '2026-10-22T16:00:00Z',
+    },
+    {
+      id: 'fb-2',
+      targetType: 'SESSION',
+      targetId: 'cs-1',
+      authorId: 'user-2',
+      rating: 5,
+      comment: 'Conseils clairs et ciblés sur le dimensionnement des quotas et la gestion hors-ligne.',
+      createdAt: '2026-10-24T15:00:00Z',
+    },
+  ],
 };
 
 // Lecture depuis LocalStorage avec fallback sur initialData
@@ -445,7 +666,17 @@ export function loadStudyFlowData(): StudyFlowData {
       saveStudyFlowData(initialData);
       return initialData;
     }
-    return JSON.parse(raw) as StudyFlowData;
+    const parsed = JSON.parse(raw) as Partial<StudyFlowData>;
+    return {
+      ...initialData,
+      ...parsed,
+      trainings: parsed.trainings || initialData.trainings,
+      enrollments: parsed.enrollments || initialData.enrollments,
+      coachingSessions: parsed.coachingSessions || initialData.coachingSessions,
+      coachingGoals: parsed.coachingGoals || initialData.coachingGoals,
+      skillLevels: parsed.skillLevels || initialData.skillLevels,
+      feedbacks: parsed.feedbacks || initialData.feedbacks,
+    };
   } catch (err) {
     console.error('Erreur lecture localStorage, utilisation des données initiales:', err);
     return initialData;

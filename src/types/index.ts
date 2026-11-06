@@ -1,4 +1,4 @@
-export type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+export type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'COACH' | 'VIEWER';
 export type TaskPriority = 'BASSE' | 'NORMALE' | 'HAUTE' | 'URGENTE';
 
 export interface User {
@@ -145,4 +145,106 @@ export interface ProjectReport {
   inProgressTasks: number;
   summary: string;
   recommendations: string[];
+}
+
+// ==========================================
+// MODULE 7 : FORMATIONS & COACHING (v1.1)
+// ==========================================
+
+export type TrainingLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+export type TrainingStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'DONE';
+export type TrainingMode = 'ONLINE' | 'ONSITE';
+
+export interface Training {
+  id: string;
+  teamId: string;
+  title: string;
+  description: string;
+  skill: string;
+  level: TrainingLevel;
+  trainerId: string;
+  startsAt: string; // ISO date string
+  endsAt: string;
+  capacity: number;
+  mode: TrainingMode;
+  location?: string | null;
+  meetingUrl?: string | null;
+  status: TrainingStatus;
+  createdAt: string;
+}
+
+export type EnrollmentStatus = 'ENROLLED' | 'WAITLIST' | 'CANCELLED';
+
+export interface TrainingEnrollment {
+  id: string;
+  trainingId: string;
+  userId: string;
+  status: EnrollmentStatus;
+  attended: boolean;
+  enrolledAt: string;
+}
+
+export interface TrainingResource {
+  id: string;
+  trainingId: string;
+  title: string;
+  url?: string | null;
+  fileId?: string | null;
+}
+
+export type CoachingStatus = 'REQUESTED' | 'CONFIRMED' | 'RESCHEDULED' | 'DONE' | 'CANCELLED';
+
+export interface CoachingSession {
+  id: string;
+  teamId: string;
+  projectId?: string | null;
+  coachId: string;
+  coacheeId: string;
+  topic: string;
+  proposedSlots: string[]; // 1 à 3 créneaux
+  scheduledAt?: string | null;
+  durationMin: number; // 30, 45, 60
+  mode: TrainingMode;
+  location?: string | null;
+  meetingUrl?: string | null;
+  status: CoachingStatus;
+  sharedReport?: string | null;
+  privateNotes?: string | null; // Strictement confidentiel au coach !
+  createdAt: string;
+}
+
+export type GoalStatus = 'OPEN' | 'ACHIEVED' | 'ABANDONED';
+
+export interface CoachingGoal {
+  id: string;
+  userId: string;
+  teamId: string;
+  coachId?: string | null;
+  title: string;
+  skill: string;
+  targetDate?: string | null;
+  progress: number; // 0 à 100
+  status: GoalStatus;
+  createdAt: string;
+}
+
+export interface SkillLevel {
+  id: string;
+  userId: string;
+  teamId: string;
+  skill: string;
+  level: number; // 0 à 5
+  selfAssessed: boolean;
+  assessedById?: string | null;
+  updatedAt: string;
+}
+
+export interface Feedback {
+  id: string;
+  targetType: 'TRAINING' | 'SESSION';
+  targetId: string;
+  authorId: string;
+  rating: number; // 1 à 5
+  comment?: string | null;
+  createdAt: string;
 }

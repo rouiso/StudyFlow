@@ -8,9 +8,10 @@ import {
   MessageSquare,
   BarChart3,
   Sparkles,
+  GraduationCap,
 } from 'lucide-react';
 
-export type ActiveTab = 'kanban' | 'tasks' | 'calendar' | 'chat' | 'stats' | 'ai';
+export type ActiveTab = 'kanban' | 'tasks' | 'calendar' | 'stats' | 'chat' | 'coaching' | 'ai';
 
 interface MobileBottomNavProps {
   activeTab: ActiveTab;
@@ -27,8 +28,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     { id: 'kanban' as ActiveTab, label: 'Kanban', icon: Kanban },
     { id: 'tasks' as ActiveTab, label: 'Tâches', icon: CheckSquare },
     { id: 'calendar' as ActiveTab, label: 'Calendrier', icon: Calendar },
-    { id: 'chat' as ActiveTab, label: 'Chat', icon: MessageSquare, badge: unreadMessagesCount },
-    { id: 'stats' as ActiveTab, label: 'Stats', icon: BarChart3 },
+    { id: 'stats' as ActiveTab, label: 'Stats M4', icon: BarChart3 },
+    { id: 'chat' as ActiveTab, label: 'Échanges', icon: MessageSquare, badge: unreadMessagesCount },
+    { id: 'coaching' as ActiveTab, label: 'Coaching', icon: GraduationCap },
     { id: 'ai' as ActiveTab, label: 'IA Copilot', icon: Sparkles, highlight: true },
   ];
 

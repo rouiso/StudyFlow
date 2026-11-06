@@ -23,9 +23,12 @@ interface KanbanBoardProps {
   subtasks: Subtask[];
   users: User[];
   labels: Label[];
+  currentUser?: User;
   onOpenTaskModal: (task: Task | null, columnId?: string) => void;
   onMoveTask: (taskId: string, targetColumnId: string) => void;
   onAddColumn?: (name: string, wipLimit?: number) => void;
+  onDeleteColumn?: (columnId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -34,16 +37,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   subtasks,
   users,
   labels,
+  currentUser,
   onOpenTaskModal,
   onMoveTask,
   onAddColumn,
+  onDeleteColumn,
+  onDeleteTask,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('ALL');
+  const [onlyMyTasks, setOnlyMyTasks] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [newColWip, setNewColWip] = useState('');
+
+  const isCoachOrViewer = currentUser?.role === 'COACH' || currentUser?.role === 'VIEWER';
 
   // Filtrage combiné
   const filteredTasks = tasks.filter((task) => {
@@ -58,7 +67,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       return false;
     }
 
-    if (selectedAssignee !== 'ALL' && (!task.assigneeIds || !task.assigneeIds.includes(selectedAssignee))) {
+    if (onlyMyTasks && currentUser) {
+      if (!task.assigneeIds || !task.assigneeIds.includes(currentUser.id)) {
+        return false;
+      }
+    } else if (selectedAssignee !== 'ALL' && (!task.assigneeIds || !task.assigneeIds.includes(selectedAssignee))) {
       return false;
     }
 
@@ -80,6 +93,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Bannière de notification du rôle Coach / Observateur */}
+      {isCoachOrViewer && (
+        <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between gap-3 text-xs text-purple-200 animate-fade-in shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-purple-300" />
+            </div>
+            <span>
+              <strong>Mode Coach ({currentUser?.name}) :</strong> Accès de supervision transversale. Le déplacement et l&apos;édition directe des tâches de développement sont réservés aux contributeurs étudiants (&sect;4.2).
+            </span>
+          </div>
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 whitespace-nowrap">
+            Consultation seule &sect;4.2
+          </span>
+        </div>
+      )}
+
       {/* Barre de recherche et filtres rapides */}
       <div className="glass-panel p-3 rounded-2xl flex flex-wrap items-center justify-between gap-2.5">
         <div className="relative flex-1 min-w-[200px]">
@@ -94,6 +124,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Bouton Toggle Mes Tâches */}
+          {currentUser && (
+            <button
+              type="button"
+              onClick={() => {
+                setOnlyMyTasks(!onlyMyTasks);
+                if (!onlyMyTasks) setSelectedAssignee('ALL');
+              }}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                onlyMyTasks
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-800/90 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Mes tâches ({currentUser.name.split(' ')[0]})</span>
+            </button>
+          )}
+
           {/* Filtre Priorité */}
           <select
             value={selectedPriority}
@@ -108,27 +157,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </select>
 
           {/* Filtre Assigné */}
-          <select
-            value={selectedAssignee}
-            onChange={(e) => setSelectedAssignee(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-300 text-xs focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="ALL">Tous les assignés</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          {!onlyMyTasks && (
+            <select
+              value={selectedAssignee}
+              onChange={(e) => setSelectedAssignee(e.target.value)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-300 text-xs focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="ALL">Tous les assignés</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Bouton Nouvelle Tâche */}
-          <button
-            onClick={() => onOpenTaskModal(null)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all transform hover:scale-105"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Nouvelle Tâche</span>
-          </button>
+          {!isCoachOrViewer && (
+            <button
+              onClick={() => onOpenTaskModal(null)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all transform hover:scale-105"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Nouvelle Tâche</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -193,10 +246,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     return (
                       <div
                         key={t.id}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
+                        draggable={!isCoachOrViewer}
+                        onDragStart={(e) => {
+                          if (!isCoachOrViewer) e.dataTransfer.setData('text/plain', t.id);
+                        }}
                         onClick={() => onOpenTaskModal(t)}
-                        className="glass-card glass-card-hover p-3.5 rounded-xl cursor-pointer group relative border border-slate-800 hover:border-indigo-500/40"
+                        className={`glass-card glass-card-hover p-3.5 rounded-xl cursor-pointer group relative border border-slate-800 hover:border-indigo-500/40 ${
+                          onlyMyTasks && currentUser && t.assigneeIds?.includes(currentUser.id)
+                            ? 'ring-1 ring-indigo-500/60 bg-indigo-950/20'
+                            : ''
+                        }`}
                       >
                         {/* En-tête de carte */}
                         <div className="flex items-start justify-between gap-2 mb-2">
@@ -214,29 +273,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           </div>
 
                           {/* Boutons de déplacement rapide pour mobile (flèches gauche / droite) */}
-                          <div
-                            className="flex items-center gap-0.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {colIndex > 0 && (
-                              <button
-                                title={`Déplacer vers ${columns[colIndex - 1].name}`}
-                                onClick={() => onMoveTask(t.id, columns[colIndex - 1].id)}
-                                className="p-1 rounded bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white"
-                              >
-                                <ChevronLeft className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {colIndex < columns.length - 1 && (
-                              <button
-                                title={`Déplacer vers ${columns[colIndex + 1].name}`}
-                                onClick={() => onMoveTask(t.id, columns[colIndex + 1].id)}
-                                className="p-1 rounded bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white"
-                              >
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
+                          {!isCoachOrViewer && (
+                            <div
+                              className="flex items-center gap-0.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {colIndex > 0 && (
+                                <button
+                                  title={`Déplacer vers ${columns[colIndex - 1].name}`}
+                                  onClick={() => onMoveTask(t.id, columns[colIndex - 1].id)}
+                                  className="p-1 rounded bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {colIndex < columns.length - 1 && (
+                                <button
+                                  title={`Déplacer vers ${columns[colIndex + 1].name}`}
+                                  onClick={() => onMoveTask(t.id, columns[colIndex + 1].id)}
+                                  className="p-1 rounded bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white"
+                                >
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Titre */}
@@ -291,13 +352,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Bouton rapide d'ajout au bas de la colonne */}
-              <button
-                onClick={() => onOpenTaskModal(null, col.id)}
-                className="mt-2.5 w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/40 text-slate-400 hover:text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Ajouter une carte</span>
-              </button>
+              {!isCoachOrViewer ? (
+                <button
+                  onClick={() => onOpenTaskModal(null, col.id)}
+                  className="mt-2.5 w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/40 text-slate-400 hover:text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ajouter une carte</span>
+                </button>
+              ) : (
+                <div className="mt-2.5 w-full py-1.5 text-center text-[10px] text-slate-500 italic">
+                  Édition verrouillée (Mode Coach)
+                </div>
+              )}
             </div>
           );
         })}

@@ -39,21 +39,16 @@
 ## 🛠️ Lancement en Local
 
 ```bash
-# 1. Installer les dépendances
+# 1. Installation des dépendances (déjà effectuée)
 npm install
 
-# 2. Configurer la base SQLite locale
-# Créer .env à partir de .env.example, puis conserver DATABASE_URL=file:./dev.db
-npx prisma db push
-npm run db:seed
-
-# 3. Lancer le serveur de développement
+# 2. Lancer le serveur de développement
 npm run dev
 
-# 4. Ouvrir l'application
+# 3. Ouvrir l'application
 # Rendez-vous sur http://localhost:3000 depuis votre navigateur ou votre smartphone (via l'adresse IP locale)
 ```
-Le fichier `.env` doit définir `DATABASE_URL` pour Prisma. Pour une installation locale SQLite, utilisez `DATABASE_URL="file:./dev.db"`.
+
 ---
 
 ## 📋 Scénario Recommandé pour la Démonstration Notée

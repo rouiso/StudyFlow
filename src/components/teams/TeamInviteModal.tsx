@@ -168,8 +168,9 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                       className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-slate-300 focus:ring-1 focus:ring-indigo-500"
                     >
                       <option value="ADMIN">ADMIN</option>
-                      <option value="MEMBER">MEMBER</option>
-                      <option value="VIEWER">VIEWER</option>
+                      <option value="COACH">COACH (Enseignant / Mentor)</option>
+                      <option value="MEMBER">MEMBER (Contributeur)</option>
+                      <option value="VIEWER">VIEWER (Observateur)</option>
                     </select>
                   ) : (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">

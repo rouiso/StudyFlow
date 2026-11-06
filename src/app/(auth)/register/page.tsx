@@ -56,7 +56,7 @@ export default function RegisterPage() {
 
       // Enregistrer le nouvel utilisateur connecté dans le store local
       try {
-        const raw = localStorage.getItem('studyflow_data_v1.0');
+        const raw = localStorage.getItem('studyflow_data_v1.1');
         if (raw) {
           const store = JSON.parse(raw);
           const newUser = {
@@ -71,7 +71,7 @@ export default function RegisterPage() {
           if (!store.users.some((u: any) => u.id === data.user.id)) {
             store.users.push(newUser);
           }
-          localStorage.setItem('studyflow_data_v1.0', JSON.stringify(store));
+          localStorage.setItem('studyflow_data_v1.1', JSON.stringify(store));
         }
         localStorage.setItem('studyflow_current_user', JSON.stringify(data.user));
       } catch (e) {

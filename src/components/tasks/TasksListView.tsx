@@ -20,6 +20,7 @@ interface TasksListViewProps {
   columns: Column[];
   users: User[];
   labels: Label[];
+  currentUser?: User;
   onOpenTaskModal: (task: Task | null) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onDeleteTask: (taskId: string) => void;
@@ -31,15 +32,22 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
   columns,
   users,
   labels,
+  currentUser,
   onOpenTaskModal,
   onToggleSubtask,
   onDeleteTask,
 }) => {
   const [filterColumn, setFilterColumn] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [onlyMyTasks, setOnlyMyTasks] = useState(false);
+
+  const isCoachOrViewer = currentUser?.role === 'COACH' || currentUser?.role === 'VIEWER';
 
   const filtered = tasks.filter((t) => {
     if (filterColumn !== 'ALL' && t.columnId !== filterColumn) return false;
+    if (onlyMyTasks && currentUser) {
+      if (!t.assigneeIds || !t.assigneeIds.includes(currentUser.id)) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (!t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) {
@@ -64,7 +72,22 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {currentUser && (
+            <button
+              type="button"
+              onClick={() => setOnlyMyTasks(!onlyMyTasks)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                onlyMyTasks
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Mes tâches ({currentUser.name.split(' ')[0]})</span>
+            </button>
+          )}
+
           <select
             value={filterColumn}
             onChange={(e) => setFilterColumn(e.target.value)}
@@ -78,13 +101,15 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
             ))}
           </select>
 
-          <button
-            onClick={() => onOpenTaskModal(null)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Ajouter</span>
-          </button>
+          {!isCoachOrViewer && (
+            <button
+              onClick={() => onOpenTaskModal(null)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajouter</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -3,33 +3,65 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, Shield, UserCheck, GraduationCap } from 'lucide-react';
+
+const DEMO_ACCOUNTS = [
+  {
+    name: 'Léa Martin',
+    email: 'lea.martin@univ-paris.fr',
+    role: 'OWNER',
+    roleLabel: 'Chef de projet',
+    color: 'from-indigo-500/20 to-purple-500/20 border-indigo-500/40 text-indigo-300',
+    icon: Shield,
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+  },
+  {
+    name: 'Thomas Dubois',
+    email: 'thomas.dubois@univ-paris.fr',
+    role: 'ADMIN',
+    roleLabel: 'Lead Dev',
+    color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/40 text-blue-300',
+    icon: UserCheck,
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+  },
+  {
+    name: 'Sarah Benali',
+    email: 'sarah.benali@univ-paris.fr',
+    role: 'MEMBER',
+    roleLabel: 'Développeuse',
+    color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/40 text-emerald-300',
+    icon: UserCheck,
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+  },
+  {
+    name: 'Mme Claire Dupont',
+    email: 'claire.dupont@univ-paris.fr',
+    role: 'COACH',
+    roleLabel: 'Coach Pédagogique (v1.1)',
+    color: 'from-purple-500/20 to-pink-500/20 border-purple-500/40 text-purple-300',
+    icon: GraduationCap,
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitLogin = async (targetEmail: string, targetPass: string) => {
     setErrorMessage('');
-
-    if (!email.trim() || !password) {
-      setErrorMessage('Veuillez renseigner votre e-mail et votre mot de passe.');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: targetEmail.trim(), password: targetPass }),
       });
 
       const data = await res.json();
@@ -40,9 +72,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Enregistrer l'utilisateur connecté dans le store local
+      // Enregistrer l'utilisateur connecté dans le store local v1.1
       try {
-        const raw = localStorage.getItem('studyflow_data_v1.0');
+        const raw = localStorage.getItem('studyflow_data_v1.1');
         if (raw) {
           const store = JSON.parse(raw);
           store.currentUser = {
@@ -56,7 +88,7 @@ export default function LoginPage() {
           if (!store.users.some((u: any) => u.id === data.user.id)) {
             store.users.push(store.currentUser);
           }
-          localStorage.setItem('studyflow_data_v1.0', JSON.stringify(store));
+          localStorage.setItem('studyflow_data_v1.1', JSON.stringify(store));
         }
         localStorage.setItem('studyflow_current_user', JSON.stringify(data.user));
       } catch (e) {
@@ -71,9 +103,23 @@ export default function LoginPage() {
     }
   };
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setErrorMessage('Veuillez renseigner votre e-mail et votre mot de passe.');
+      return;
+    }
+    submitLogin(email, password);
+  };
+
+  const handleQuickLogin = (demoEmail: string) => {
+    setEmail(demoEmail);
+    submitLogin(demoEmail, 'password123');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-950 text-slate-100">
-      <div className="w-full max-w-md space-y-7">
+      <div className="w-full max-w-md space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 shadow-xl shadow-indigo-500/25 text-white font-extrabold text-xl">
@@ -81,14 +127,56 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Connexion à StudyFlow</h1>
           <p className="text-xs text-slate-400">
-            Espace de travail collaboratif pour équipes universitaires
+            Espace de travail collaboratif pour équipes universitaires (v1.1)
           </p>
         </div>
 
+        {/* Quick Demo Login Cards */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              Connexion rapide (Comptes Démo)
+            </span>
+            <span className="text-[10px] text-slate-500">1-clic</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map((acc) => {
+              const Icon = acc.icon;
+              return (
+                <button
+                  key={acc.email}
+                  type="button"
+                  onClick={() => handleQuickLogin(acc.email)}
+                  disabled={isLoading}
+                  className={`p-2.5 rounded-xl border bg-gradient-to-br ${acc.color} hover:brightness-125 transition-all text-left flex items-start gap-2.5 group`}
+                >
+                  <img
+                    src={acc.avatar}
+                    alt={acc.name}
+                    className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-white truncate group-hover:text-indigo-200">
+                      {acc.name}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">{acc.roleLabel}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Card Form */}
-        <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 shadow-2xl space-y-5">
+        <div className="glass-panel p-6 sm:p-7 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
+          <div className="text-xs font-semibold text-slate-300 pb-1 border-b border-slate-800 flex items-center justify-between">
+            <span>Ou connectez-vous avec vos identifiants</span>
+          </div>
+
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2 animate-fade-in">
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2 animate-fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -107,7 +195,7 @@ export default function LoginPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nom.prenom@univ-domaine.fr"
+                  placeholder="nom.prenom@univ-paris.fr"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>

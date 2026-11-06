@@ -12,13 +12,17 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { Task, Milestone, Column, User } from '@/types';
+import { Task, Milestone, Column, User, Training, CoachingSession } from '@/types';
+import { GraduationCap, Users } from 'lucide-react';
 
 interface CalendarViewProps {
   tasks: Task[];
   milestones: Milestone[];
   columns: Column[];
   users: User[];
+  trainings?: Training[];
+  coachingSessions?: CoachingSession[];
+  currentUserId?: string;
   onOpenTaskModal: (task: Task) => void;
   onAddMilestone: (milestone: Omit<Milestone, 'id'>) => void;
   onToggleMilestone: (milestoneId: string) => void;
@@ -30,6 +34,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   milestones,
   columns,
   users,
+  trainings = [],
+  coachingSessions = [],
+  currentUserId,
   onOpenTaskModal,
   onAddMilestone,
   onToggleMilestone,
@@ -79,12 +86,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setShowAddMilestoneModal(false);
   };
 
-  // Grouper les événements par date (YYYY-MM-DD)
+  // Grouper les événements multi-sources par date (YYYY-MM-DD) - Module 4 v1.1
   const getEventsForDay = (day: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const dayTasks = tasks.filter((t) => t.dueDate === dateStr);
     const dayMilestones = milestones.filter((m) => m.date === dateStr);
-    return { dayTasks, dayMilestones };
+    const dayTrainings = trainings.filter((tr) => tr.startsAt && tr.startsAt.startsWith(dateStr));
+    const dayCoaching = coachingSessions.filter(
+      (cs) =>
+        cs.scheduledAt &&
+        cs.scheduledAt.startsWith(dateStr) &&
+        cs.status !== 'CANCELLED' &&
+        (!currentUserId || cs.coachId === currentUserId || cs.coacheeId === currentUserId)
+    );
+    return { dayTasks, dayMilestones, dayTrainings, dayCoaching };
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -149,7 +164,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             const day = i + 1;
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isToday = dateStr === todayStr;
-            const { dayTasks, dayMilestones } = getEventsForDay(day);
+            const { dayTasks, dayMilestones, dayTrainings, dayCoaching } = getEventsForDay(day);
 
             return (
               <div
@@ -173,15 +188,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   )}
                 </div>
 
-                {/* Événements dans la case */}
+                {/* Événements dans la case (Registre multi-sources M4/M7) */}
                 <div className="space-y-1 mt-1 overflow-y-auto max-h-[50px] sm:max-h-[60px]">
                   {dayMilestones.map((m) => (
                     <div
                       key={m.id}
-                      title={m.title}
+                      title={`Jalon M4 : ${m.title}`}
                       className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40 truncate"
                     >
                       ★ {m.title}
+                    </div>
+                  ))}
+
+                  {dayTrainings.map((tr) => (
+                    <div
+                      key={tr.id}
+                      title={`Formation M7 : ${tr.title}`}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 truncate flex items-center gap-1"
+                    >
+                      <span>🎓</span>
+                      <span className="truncate">{tr.title}</span>
+                    </div>
+                  ))}
+
+                  {dayCoaching.map((cs) => (
+                    <div
+                      key={cs.id}
+                      title={`Coaching M7 : ${cs.topic}`}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/25 text-amber-300 border border-amber-500/40 truncate flex items-center gap-1"
+                    >
+                      <span>🤝</span>
+                      <span className="truncate">{cs.topic}</span>
                     </div>
                   ))}
 
@@ -189,7 +226,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <div
                       key={t.id}
                       onClick={() => onOpenTaskModal(t)}
-                      title={t.title}
+                      title={`Tâche M3/M4 : ${t.title}`}
                       className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/30 truncate cursor-pointer"
                     >
                       {t.title}
@@ -199,6 +236,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </div>
             );
           })}
+        </div>
+
+        {/* Légende Multi-sources (Cahier des charges v1.1 §6.3 point 6) */}
+        <div className="pt-3 mt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span className="font-semibold text-slate-300">Sources agrégées :</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded bg-indigo-500" />
+              <span>Échéances Tâches (M3/M4)</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded bg-purple-500" />
+              <span>Jalons Clés (M4)</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
+              <span>Formations (M7)</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded bg-amber-500" />
+              <span>Coaching Confirmé (M7)</span>
+            </span>
+          </div>
         </div>
       </div>
 
