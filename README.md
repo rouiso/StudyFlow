@@ -10,7 +10,7 @@
 ### 1. Progressive Web App (PWA) & Mode Hors-ligne
 - **Fichier Manifest (`/manifest.json`)** : Application installable en mode *standalone*, avec icônes haute résolution (192x192, 512x512 et maskable), `theme_color` (#4f46e5), et raccourcis d'accès rapide (Kanban, Calendrier, Assistant IA).
 - **Service Worker (`/sw.js`)** : Stratégie de mise en cache hybride (*Stale-While-Revalidate* pour les assets statiques, *Network First* avec secours *Offline Cache* pour les pages).
-- **Indicateur Réseau & Persistance Local-First** : Détection en direct de l'état `Online` / `Offline` avec sauvegarde instantanée dans le stockage local (LocalStorage / IndexedDB). Même déconnecté d'Internet, **toutes les opérations CRUD fonctionnent sans interruption**.
+- **Indicateur Réseau & Persistance Local-First** : Détection en direct de l'état `Online` / `Offline` avec sauvegarde instantanée dans le stockage local (LocalStorage / IndexedDB). Même déconnecté d'Internet **toutes les opérations CRUD fonctionnent sans interruption**.
 
 ### 2. Interface Mobile-First & Responsive
 - **Navigation Tactile** : Barre inférieure flottante (`MobileBottomNav`) spécialement pensée pour l'usage smartphone avec retour visuel et badges.
