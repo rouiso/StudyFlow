@@ -1,5 +1,5 @@
 // StudyFlow Service Worker - Modern Offline-First Caching Strategy
-const CACHE_NAME = 'studyflow-v1.0';
+const CACHE_NAME = 'studyflow-v1.1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

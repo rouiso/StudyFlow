@@ -8,7 +8,6 @@ import {
   Wifi,
   WifiOff,
   RotateCcw,
-  UserCheck,
   ChevronDown,
   CheckCircle,
   Users,
@@ -22,8 +21,6 @@ interface HeaderProps {
   projects: Project[];
   onSelectProject: (projectId: string) => void;
   currentUser: User;
-  users: User[];
-  onSwitchUser: (userId: string) => void;
   notifications: AppNotification[];
   onMarkNotificationRead: (id: string) => void;
   onResetData: () => void;
@@ -36,8 +33,6 @@ export const Header: React.FC<HeaderProps> = ({
   projects,
   onSelectProject,
   currentUser,
-  users,
-  onSwitchUser,
   notifications,
   onMarkNotificationRead,
   onResetData,
@@ -229,28 +224,11 @@ export const Header: React.FC<HeaderProps> = ({
             {showUserMenu && (
               <div className="absolute right-0 mt-2 w-64 rounded-xl glass-panel bg-slate-900/95 border border-slate-700/80 shadow-2xl p-2 z-50 animate-fade-in">
                 <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Membres & Rôles
+                  Session authentifiée
                 </div>
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      onSwitchUser(u.id);
-                      setShowUserMenu(false);
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-left transition-colors ${
-                      u.id === currentUser.id ? 'bg-indigo-600/30 text-indigo-300 font-semibold' : 'hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <img src={u.avatar} alt={u.name} className="w-5 h-5 rounded-full object-cover" />
-                    <div className="flex-1 truncate">
-                      <div className="font-medium text-slate-200">{u.name}</div>
-                      <div className="text-[10px] text-slate-400">{u.role}</div>
-                    </div>
-                  </button>
-                ))}
+                <div className="px-3 pb-2 text-xs text-slate-400 truncate">{currentUser.email}</div>
 
-                <div className="pt-2 mt-2 border-t border-slate-800 space-y-1">
+                <div className="pt-2 mt-1 border-t border-slate-800 space-y-1">
                   <button
                     onClick={() => {
                       onResetData();

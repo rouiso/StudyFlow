@@ -22,14 +22,13 @@ import { TeamInviteModal } from '@/components/teams/TeamInviteModal';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { TrainingCoachingView } from '@/components/training/TrainingCoachingView';
 import { UserRole, Training, CoachingSession, CoachingGoal, SkillLevel, TrainingMode } from '@/types';
-import { Sparkles, CheckCircle2, Shield, UserCheck, GraduationCap } from 'lucide-react';
+import { CheckCircle2, Shield, UserCheck, GraduationCap } from 'lucide-react';
 
 export default function StudyFlowHome() {
   const [data, setData] = useState<StudyFlowData>(initialData);
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('kanban');
   const [currentProjectId, setCurrentProjectId] = useState<string>('proj-1');
-  const [switchToast, setSwitchToast] = useState<string | null>(null);
 
   // État Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -382,50 +381,6 @@ export default function StudyFlowHome() {
     }));
   };
 
-  // GESTION DU PROFIL & CHANGEMENT DE MEMBRE (Multi-utilisateurs dynamique)
-  const handleSwitchUser = async (userId: string) => {
-    try {
-      const res = await fetch('/api/auth/switch-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
-      const resData = await res.json();
-      if (resData.ok && resData.user) {
-        const targetUser = {
-          id: resData.user.id,
-          name: resData.user.name,
-          email: resData.user.email,
-          avatar: resData.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          role: resData.user.role,
-          joinedAt: new Date().toISOString(),
-        };
-
-        updateData((prev) => ({
-          ...prev,
-          currentUser: targetUser,
-          users: prev.users.map((u) => (u.id === targetUser.id ? { ...u, ...targetUser } : u)),
-        }));
-
-        setSwitchToast(`Session active : ${targetUser.name} (${targetUser.role})`);
-        setTimeout(() => setSwitchToast(null), 3500);
-        return;
-      }
-    } catch (e) {
-      console.error('Erreur switch-user serveur:', e);
-    }
-
-    // Fallback local instantané
-    const targetUser = data.users.find((u) => u.id === userId);
-    if (!targetUser) return;
-    updateData((prev) => ({
-      ...prev,
-      currentUser: targetUser,
-    }));
-    setSwitchToast(`Session active : ${targetUser.name} (${targetUser.role})`);
-    setTimeout(() => setSwitchToast(null), 3500);
-  };
-
   const handleResetData = () => {
     if (confirm('Réinitialiser toutes les données aux valeurs de démo du Cahier des Charges ?')) {
       const reset = resetToDemoData();
@@ -725,8 +680,6 @@ export default function StudyFlowHome() {
         projects={data.projects}
         onSelectProject={(id) => setCurrentProjectId(id)}
         currentUser={data.currentUser}
-        users={data.users}
-        onSwitchUser={handleSwitchUser}
         notifications={data.notifications}
         onMarkNotificationRead={handleMarkNotificationRead}
         onResetData={handleResetData}
@@ -734,7 +687,7 @@ export default function StudyFlowHome() {
         onOpenProjectModal={() => setIsProjectModalOpen(true)}
       />
 
-      {/* Barre de Persona & Rôle Actif (Visualisation Multi-Membres Dynamique v1.1) */}
+      {/* Barre de Persona & Rôle Actif */}
       <div className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-2.5">
         <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -765,39 +718,8 @@ export default function StudyFlowHome() {
             </div>
           </div>
 
-          {/* Sélecteur rapide de membre en 1 clic */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] text-slate-400 mr-1 hidden sm:inline">Changer de membre :</span>
-            {data.users.map((u) => {
-              const isActive = u.id === data.currentUser.id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => handleSwitchUser(u.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
-                    isActive
-                      ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400 scale-105'
-                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60'
-                  }`}
-                >
-                  <img src={u.avatar} alt={u.name} className="w-3.5 h-3.5 rounded-full object-cover" />
-                  <span>{u.name.split(' ')[0]}</span>
-                  <span className="text-[9px] opacity-75">({u.role})</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
-
-      {/* Notification Toast lors du changement de membre */}
-      {switchToast && (
-        <div className="fixed bottom-6 right-6 z-50 p-3.5 rounded-2xl bg-indigo-950/95 border border-indigo-500/50 text-indigo-200 text-xs font-semibold shadow-2xl flex items-center gap-2.5 animate-bounce">
-          <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-          <span>{switchToast}</span>
-        </div>
-      )}
 
       {/* Contenu Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 pb-24">
