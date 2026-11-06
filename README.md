@@ -53,9 +53,7 @@ npm run dev
 # 4. Ouvrir l'application
 # Rendez-vous sur http://localhost:3000 depuis votre navigateur ou votre smartphone (via l'adresse IP locale)
 ```
-
 Le fichier `.env` doit définir `DATABASE_URL` pour Prisma. Pour une installation locale SQLite, utilisez `DATABASE_URL="file:./dev.db"`.
-
 ---
 
 ## 📋 Scénario Recommandé pour la Démonstration Notée
