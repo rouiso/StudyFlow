@@ -110,16 +110,41 @@ export interface AppNotification {
   link?: string;
 }
 
+export interface FileVersionItem {
+  id: string;
+  version: number;
+  size: number;
+  uploaderId: string;
+  createdAt: string;
+  url?: string;
+  dataUrl?: string;
+  note?: string;
+}
+
+export interface FolderItem {
+  id: string;
+  projectId: string;
+  parentId?: string | null;
+  name: string;
+  color?: string;
+  createdAt?: string;
+}
+
 export interface FileItem {
   id: string;
   projectId: string;
   taskId?: string | null;
+  folderId?: string | null;
   uploaderId: string;
   name: string;
   mimeType: string;
   size: number;
+  currentVersion?: number;
+  versions?: FileVersionItem[];
   createdAt: string;
   url?: string;
+  dataUrl?: string;
+  description?: string;
 }
 
 export interface Activity {

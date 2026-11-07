@@ -11,6 +11,7 @@ import {
   Message,
   AppNotification,
   FileItem,
+  FolderItem,
   Activity,
   ProjectReport,
   Training,
@@ -35,6 +36,7 @@ export interface StudyFlowData {
   messages: Message[];
   notifications: AppNotification[];
   files: FileItem[];
+  folders?: FolderItem[];
   activities: Activity[];
   reports: ProjectReport[];
   // Module 7 : Formations & Coaching (v1.1)
@@ -366,35 +368,105 @@ export const initialData: StudyFlowData = {
       createdAt: '2026-10-26T11:00:00Z',
     },
   ],
+  folders: [
+    {
+      id: 'folder-1',
+      projectId: 'proj-1',
+      name: 'Cahier des charges & Spécifications',
+      color: '#6366f1',
+      createdAt: '2026-10-18T09:00:00Z',
+    },
+    {
+      id: 'folder-2',
+      projectId: 'proj-1',
+      name: 'Maquettes & Design UI',
+      color: '#ec4899',
+      createdAt: '2026-10-19T11:00:00Z',
+    },
+    {
+      id: 'folder-3',
+      projectId: 'proj-1',
+      name: 'Architecture & Audits Techniques',
+      color: '#10b981',
+      createdAt: '2026-10-20T14:00:00Z',
+    },
+  ],
   files: [
     {
       id: 'file-1',
       projectId: 'proj-1',
       taskId: 'task-1',
+      folderId: 'folder-1',
       uploaderId: 'user-1',
       name: 'cahier-des-charges-studyflow.pdf',
       mimeType: 'application/pdf',
       size: 3027224,
+      currentVersion: 2,
+      description: 'Cahier des charges complet v1.1 (Modules M1 à M7 + Bonus IA & PWA Offline)',
+      versions: [
+        {
+          id: 'file-1-v2',
+          version: 2,
+          size: 3027224,
+          uploaderId: 'user-1',
+          createdAt: '2026-10-20T10:00:00Z',
+          note: 'Ajout du Module 7 (Formations & Coaching) et critères soutenance',
+        },
+        {
+          id: 'file-1-v1',
+          version: 1,
+          size: 2640110,
+          uploaderId: 'user-1',
+          createdAt: '2026-10-16T09:00:00Z',
+          note: 'Version initiale M1-M6',
+        },
+      ],
       createdAt: '2026-10-20T10:00:00Z',
     },
     {
       id: 'file-2',
       projectId: 'proj-1',
       taskId: 'task-3',
+      folderId: 'folder-2',
       uploaderId: 'user-4',
       name: 'maquettes-mobile-studyflow.fig',
       mimeType: 'application/octet-stream',
       size: 1450000,
+      currentVersion: 1,
+      description: 'Prototype mobile-first et composants accessibles WCAG 2.1 AA',
+      versions: [
+        {
+          id: 'file-2-v1',
+          version: 1,
+          size: 1450000,
+          uploaderId: 'user-4',
+          createdAt: '2026-10-22T14:30:00Z',
+          note: 'Export Figma initial',
+        },
+      ],
       createdAt: '2026-10-22T14:30:00Z',
     },
     {
       id: 'file-3',
       projectId: 'proj-1',
       taskId: 'task-2',
+      folderId: 'folder-3',
       uploaderId: 'user-3',
       name: 'service-worker-audit.json',
       mimeType: 'application/json',
       size: 4500,
+      currentVersion: 1,
+      description: 'Rapport Lighthouse PWA & stratégie de cache Service Worker v1.3',
+      versions: [
+        {
+          id: 'file-3-v1',
+          version: 1,
+          size: 4500,
+          uploaderId: 'user-3',
+          createdAt: '2026-10-26T16:00:00Z',
+          note: 'Audit initial hors-ligne',
+        },
+      ],
       createdAt: '2026-10-26T16:00:00Z',
     },
   ],
@@ -670,6 +742,7 @@ export function loadStudyFlowData(): StudyFlowData {
     return {
       ...initialData,
       ...parsed,
+      folders: parsed.folders || initialData.folders,
       trainings: parsed.trainings || initialData.trainings,
       enrollments: parsed.enrollments || initialData.enrollments,
       coachingSessions: parsed.coachingSessions || initialData.coachingSessions,

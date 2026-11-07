@@ -16,6 +16,7 @@ import {
   Milestone,
   Message,
   FileItem,
+  FolderItem,
   ProjectReport,
   Activity,
   UserRole,
@@ -36,6 +37,7 @@ import {
   getRolePermissions,
   ROLE_METADATA,
 } from '@/lib/user-management';
+import { appendOrVersionFile } from '@/lib/file-manager';
 import { Header } from '@/components/layout/Header';
 import { MobileBottomNav, ActiveTab } from '@/components/layout/MobileBottomNav';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -516,23 +518,66 @@ export default function StudyFlowHome() {
     }));
   };
 
-  const handleUploadFile = (fileData: Omit<FileItem, 'id' | 'createdAt'>) => {
-    const newFile: FileItem = {
-      ...fileData,
-      id: `file-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
+  const handleUploadFile = (
+    fileData: Omit<FileItem, 'id' | 'createdAt'> & { targetFileId?: string; note?: string }
+  ) => {
+    updateData((prev) => {
+      const { files: nextFiles, file: savedFile } = appendOrVersionFile(prev.files, fileData);
+      const uploadActivity: Activity = {
+        id: `act-${Date.now()}`,
+        projectId: currentProject.id,
+        taskId: savedFile.taskId || null,
+        userId: data.currentUser.id,
+        type: 'FILE_UPLOADED',
+        payload: {
+          fileName: savedFile.name,
+          version: savedFile.currentVersion || 1,
+        },
+        createdAt: new Date().toISOString(),
+      };
 
-    updateData((prev) => ({
-      ...prev,
-      files: [newFile, ...prev.files],
-    }));
+      return {
+        ...prev,
+        files: nextFiles,
+        activities: [uploadActivity, ...prev.activities],
+      };
+    });
   };
 
   const handleDeleteFile = (fileId: string) => {
     updateData((prev) => ({
       ...prev,
       files: prev.files.filter((f) => f.id !== fileId),
+    }));
+  };
+
+  const handleCreateFolder = (folderData: Omit<FolderItem, 'id' | 'createdAt'>) => {
+    const newFolder: FolderItem = {
+      ...folderData,
+      id: `folder-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    updateData((prev) => ({
+      ...prev,
+      folders: [...(prev.folders || []), newFolder],
+    }));
+  };
+
+  const handleDeleteFolder = (folderId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      folders: (prev.folders || []).filter((f) => f.id !== folderId),
+      files: prev.files.map((f) => (f.folderId === folderId ? { ...f, folderId: null } : f)),
+    }));
+  };
+
+  const handleUpdateFileMetadata = (
+    fileId: string,
+    updates: Partial<Pick<FileItem, 'folderId' | 'taskId' | 'description' | 'name'>>
+  ) => {
+    updateData((prev) => ({
+      ...prev,
+      files: prev.files.map((f) => (f.id === fileId ? { ...f, ...updates } : f)),
     }));
   };
 
@@ -1313,9 +1358,14 @@ export default function StudyFlowHome() {
             users={teamUsers}
             currentUser={effectiveCurrentUser}
             files={currentFiles}
+            folders={(data.folders || []).filter((f) => f.projectId === currentProject.id)}
+            tasks={currentTasks}
             onSendMessage={handleSendMessage}
             onUploadFile={handleUploadFile}
             onDeleteFile={handleDeleteFile}
+            onCreateFolder={handleCreateFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onUpdateFileMetadata={handleUpdateFileMetadata}
           />
         )}
 

@@ -350,5 +350,84 @@ describe('User Management & RBAC Engine (Module 1)', () => {
       'PwaProvider doit vérifier la connectivité Internet réelle (quand le Wi-Fi est coupé sous Windows/localhost) et exposer toggleOfflineMode'
     );
   });
+
+  it('Module 6 (Fichiers & Documents) : validation taille/quota/extensions, versioning v1->v2 et permissions RBAC', async () => {
+    const {
+      validateFileUpload,
+      appendOrVersionFile,
+      canDeleteFile,
+      getFileCategory,
+    } = await import('../src/lib/file-manager');
+
+    // 1. Refus d'un fichier exécutable dangereux
+    const forbiddenRes = validateFileUpload({
+      fileName: 'malware.exe',
+      fileSize: 1024,
+      currentTotalBytes: 0,
+      userRole: 'MEMBER',
+    });
+    assert.strictEqual(forbiddenRes.valid, false);
+    assert.strictEqual(forbiddenRes.code, 'FORBIDDEN_EXTENSION');
+
+    // 2. Refus pour un VIEWER (lecture seule)
+    const viewerRes = validateFileUpload({
+      fileName: 'notes.pdf',
+      fileSize: 1024,
+      currentTotalBytes: 0,
+      userRole: 'VIEWER',
+    });
+    assert.strictEqual(viewerRes.valid, false);
+    assert.strictEqual(viewerRes.code, 'FORBIDDEN_ROLE');
+
+    // 3. Refus au-delà de 20 Mo par fichier
+    const tooLargeRes = validateFileUpload({
+      fileName: 'video-demo.mp4',
+      fileSize: 25 * 1024 * 1024,
+      currentTotalBytes: 0,
+      userRole: 'MEMBER',
+    });
+    assert.strictEqual(tooLargeRes.valid, false);
+    assert.strictEqual(tooLargeRes.code, 'FILE_TOO_LARGE');
+
+    // 4. Versioning automatique : téléverser un fichier portant le même nom dans le même projet incrémente currentVersion (v1 -> v2)
+    const existingFiles = [
+      {
+        id: 'file-1',
+        projectId: 'proj-1',
+        uploaderId: 'u-owner',
+        name: 'architecture.pdf',
+        mimeType: 'application/pdf',
+        size: 120000,
+        currentVersion: 1,
+        createdAt: '2026-10-20T10:00:00Z',
+      },
+    ];
+
+    const versioned = appendOrVersionFile(existingFiles, {
+      projectId: 'proj-1',
+      uploaderId: 'u-member',
+      name: 'architecture.pdf',
+      mimeType: 'application/pdf',
+      size: 150000,
+      note: 'Ajout du diagramme de séquence',
+    });
+
+    assert.strictEqual(versioned.isNewVersion, true);
+    assert.strictEqual(versioned.files.length, 1);
+    assert.strictEqual(versioned.files[0].currentVersion, 2);
+    assert.strictEqual(versioned.files[0].versions?.length, 2);
+
+    // 5. Permissions de suppression : OWNER/ADMIN peuvent supprimer tout fichier, MEMBER uniquement les siens, VIEWER aucun
+    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-admin', 'ADMIN'), true);
+    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-other', 'MEMBER'), false);
+    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-owner', 'MEMBER'), true);
+    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-owner', 'VIEWER'), false);
+
+    // 6. Catégorisation automatique
+    assert.strictEqual(getFileCategory('rapport.pdf', 'application/pdf'), 'document');
+    assert.strictEqual(getFileCategory('maquette.png', 'image/png'), 'image');
+    assert.strictEqual(getFileCategory('audit.json', 'application/json'), 'code');
+  });
 });
+
 
