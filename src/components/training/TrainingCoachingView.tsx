@@ -105,7 +105,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   const [coachingDuration, setCoachingDuration] = useState(45);
   const [coachingMode, setCoachingMode] = useState<TrainingMode>('ONLINE');
 
-  // État compte-rendu
+  // État compte rendu
   const [reportShared, setReportShared] = useState('');
   const [reportPrivate, setReportPrivate] = useState('');
 
