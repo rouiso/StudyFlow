@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "tsx --test tests/business-logic.test.ts tests/user-management.test.ts",
     "realtime": "tsx realtime/server.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",

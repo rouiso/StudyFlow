@@ -5,8 +5,8 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('studyflow_session')?.value;
 
-  // Si l'utilisateur accède à la racine "/" sans cookie de session, rediriger vers "/login"
-  if (pathname === '/' && !sessionCookie) {
+  // Si l'utilisateur accède à "/" ou "/onboarding" sans cookie de session, rediriger vers "/login"
+  if ((pathname === '/' || pathname.startsWith('/onboarding')) && !sessionCookie) {
     const loginUrl = new URL('/login', request.url);
     return NextResponse.redirect(loginUrl);
   }
@@ -26,4 +26,3 @@ export const config = {
     '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|icons).*)',
   ],
 };
-

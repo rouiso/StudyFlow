@@ -1,5 +1,5 @@
 // StudyFlow Service Worker - Modern Offline-First Caching Strategy
-const CACHE_NAME = 'studyflow-v1.1';
+const CACHE_NAME = 'studyflow-v1.3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -30,10 +30,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Network First avec secours Cache pour requêtes dynamiques, Stale-While-Revalidate pour statiques
+// Fetch: Exclusion stricte des requêtes cross-origin et /api/, Network First pour pages, Stale-While-Revalidate pour statiques
 self.addEventListener('fetch', (event) => {
-  // Ignorer les requêtes non-GET ou de protocoles spéciaux (chrome-extension, etc.)
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+    return;
+  }
+
+  const url = new URL(event.request.url);
+
+  // Ne jamais intercepter ni mettre en cache les requêtes externes (ex: sonde Wi-Fi gstatic) ou les routes /api/
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;
   }
 
@@ -42,13 +48,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Si le réseau répond, cloner dans le cache
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
           return response;
         })
         .catch(async () => {
-          // En mode hors ligne, tenter le cache de la page ou de la racine
           const cachedResponse = await caches.match(event.request);
           if (cachedResponse) return cachedResponse;
           return caches.match('/');
@@ -57,7 +61,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets statiques et scripts (Stale-While-Revalidate)
+  // Assets statiques et scripts du même domaine (Stale-While-Revalidate)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)

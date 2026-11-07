@@ -2,40 +2,39 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, Shield, UserCheck, GraduationCap } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
   {
     name: 'Léa Martin',
-    email: 'lea.martin@univ-paris.fr',
+    email: 'lea.martin@univ-etudiant.fr',
     role: 'OWNER',
-    roleLabel: 'Chef de projet',
+    roleLabel: 'Propriétaire (Owner)',
     color: 'from-indigo-500/20 to-purple-500/20 border-indigo-500/40 text-indigo-300',
     icon: Shield,
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
   },
   {
-    name: 'Thomas Dubois',
-    email: 'thomas.dubois@univ-paris.fr',
+    name: 'Karim Belkacem',
+    email: 'karim.belkacem@univ-etudiant.fr',
     role: 'ADMIN',
-    roleLabel: 'Lead Dev',
+    roleLabel: 'Administrateur (Admin)',
     color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/40 text-blue-300',
     icon: UserCheck,
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
   },
   {
-    name: 'Sarah Benali',
-    email: 'sarah.benali@univ-paris.fr',
+    name: 'Sami Youssef',
+    email: 'sami.youssef@univ-etudiant.fr',
     role: 'MEMBER',
-    roleLabel: 'Développeuse',
+    roleLabel: 'Membre Contributeur',
     color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/40 text-emerald-300',
     icon: UserCheck,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
   },
   {
-    name: 'Mme Claire Dupont',
-    email: 'claire.dupont@univ-paris.fr',
+    name: 'Mme Dupont',
+    email: 'helene.dupont@univ-prof.fr',
     role: 'COACH',
     roleLabel: 'Coach Pédagogique (v1.1)',
     color: 'from-purple-500/20 to-pink-500/20 border-purple-500/40 text-purple-300',
@@ -45,7 +44,6 @@ const DEMO_ACCOUNTS = [
 ];
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
@@ -74,6 +72,9 @@ export default function LoginPage() {
 
       // Enregistrer l'utilisateur connecté dans le store local v1.1
       try {
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          await caches.delete('studyflow-v1.1').catch(() => {});
+        }
         const raw = localStorage.getItem('studyflow_data_v1.1');
         if (raw) {
           const store = JSON.parse(raw);
@@ -95,8 +96,11 @@ export default function LoginPage() {
         console.error('Erreur mise à jour utilisateur local:', e);
       }
 
-      // Connexion réussie -> redirection vers le tableau de bord
-      window.location.href = '/';
+      if (data.needsOnboarding) {
+        window.location.href = '/onboarding';
+      } else {
+        window.location.href = '/';
+      }
     } catch (err: any) {
       setErrorMessage('Impossible de contacter le serveur d’authentification.');
       setIsLoading(false);
@@ -143,7 +147,6 @@ export default function LoginPage() {
 
           <div className="grid grid-cols-2 gap-2">
             {DEMO_ACCOUNTS.map((acc) => {
-              const Icon = acc.icon;
               return (
                 <button
                   key={acc.email}
@@ -195,7 +198,7 @@ export default function LoginPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nom.prenom@univ-paris.fr"
+                  placeholder="lea.martin@univ-etudiant.fr"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>

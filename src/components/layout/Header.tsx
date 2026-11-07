@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
-  Sparkles,
   Download,
   Bell,
   Wifi,
@@ -12,11 +12,17 @@ import {
   CheckCircle,
   Users,
   Plus,
+  PlusCircle,
+  Shield,
 } from 'lucide-react';
 import { usePwa } from '../pwa/PwaProvider';
-import { User, Project, AppNotification } from '@/types';
+import { User, Project, AppNotification, Team } from '@/types';
+import { getRolePermissions, ROLE_METADATA } from '@/lib/user-management';
 
 interface HeaderProps {
+  currentTeam?: Team;
+  teams?: Team[];
+  onSelectTeam?: (teamId: string) => void;
   currentProject: Project;
   projects: Project[];
   onSelectProject: (projectId: string) => void;
@@ -29,6 +35,9 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  currentTeam,
+  teams = [],
+  onSelectTeam,
   currentProject,
   projects,
   onSelectProject,
@@ -39,47 +48,84 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTeamModal,
   onOpenProjectModal,
 }) => {
-  const { isOnline, canInstall, promptInstall } = usePwa();
+  const { isOnline, canInstall, promptInstall, toggleOfflineMode } = usePwa();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.readAt).length;
+  const perms = getRolePermissions(currentUser.role);
+  const roleMeta = ROLE_METADATA[currentUser.role] || ROLE_METADATA.MEMBER;
 
   return (
     <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 px-3 py-2.5 sm:px-6">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        {/* Logo & Sélecteur de projet */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-3">
+        {/* Logo & Sélecteur de projet / équipe */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-md shadow-indigo-500/20 text-white font-bold text-sm tracking-tight">
               SF
             </div>
-            <div className="hidden xs:block">
+            <div className="hidden md:block">
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold text-base tracking-tight text-white">StudyFlow</span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  PWA v1.0
+                  PWA v1.1
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Sélecteur de projet dropdown */}
+          {/* Sélecteur de projet & d'équipe dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowProjectMenu(!showProjectMenu)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-xs sm:text-sm font-medium text-slate-200 border border-slate-700/60 transition-colors"
             >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: currentProject.color }} />
-              <span className="truncate max-w-[130px] sm:max-w-[200px]">{currentProject.name}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentProject.color }} />
+              <span className="truncate max-w-[115px] sm:max-w-[190px]">{currentProject.name}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             </button>
 
             {showProjectMenu && (
-              <div className="absolute left-0 mt-2 w-64 rounded-xl glass-panel bg-slate-900/95 border border-slate-700/80 shadow-2xl p-1 z-50 animate-fade-in">
-                <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Projets de l&apos;équipe
+              <div className="absolute left-0 mt-2 w-72 rounded-xl glass-panel bg-slate-900/95 border border-slate-700/80 shadow-2xl p-1.5 z-50 animate-fade-in space-y-1">
+                {teams.length > 0 && onSelectTeam && (
+                  <div className="pb-1.5 mb-1 border-b border-slate-800">
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Équipe active</span>
+                      <Link
+                        href="/onboarding"
+                        onClick={() => setShowProjectMenu(false)}
+                        className="text-indigo-400 hover:text-indigo-300 lowercase font-semibold"
+                      >
+                        + rejoindre / créer
+                      </Link>
+                    </div>
+                    {teams.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          onSelectTeam(t.id);
+                          setShowProjectMenu(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors ${
+                          currentTeam?.id === t.id
+                            ? 'bg-purple-600/25 text-purple-200 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="truncate flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                          <span className="truncate">{t.name}</span>
+                        </span>
+                        {currentTeam?.id === t.id && <CheckCircle className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Projets ({currentTeam?.name || 'Équipe'})
                 </div>
                 {projects.map((p) => (
                   <button
@@ -88,26 +134,26 @@ export const Header: React.FC<HeaderProps> = ({
                       onSelectProject(p.id);
                       setShowProjectMenu(false);
                     }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs sm:text-sm text-left transition-colors ${
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs sm:text-sm text-left transition-colors ${
                       p.id === currentProject.id
                         ? 'bg-indigo-600/30 text-indigo-300 font-semibold'
                         : 'text-slate-300 hover:bg-slate-800'
                     }`}
                   >
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                     <span className="truncate flex-1">{p.name}</span>
-                    {p.id === currentProject.id && <CheckCircle className="w-3.5 h-3.5 text-indigo-400" />}
+                    {p.id === currentProject.id && <CheckCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
                   </button>
                 ))}
 
-                {onOpenProjectModal && (
+                {onOpenProjectModal && perms.canCreateProject && (
                   <div className="pt-1 mt-1 border-t border-slate-800/80">
                     <button
                       onClick={() => {
                         setShowProjectMenu(false);
                         onOpenProjectModal();
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/15 transition-colors"
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/15 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Créer un nouveau projet...</span>
@@ -121,29 +167,35 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenTeamModal && (
             <button
               onClick={onOpenTeamModal}
-              title="Gérer l'équipe et les invitations (Module 1)"
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-xs font-medium text-slate-300 border border-slate-700/60 transition-colors"
+              title="Gérer les utilisateurs, les rôles (Owner, Admin, Coach, Member) et les invitations"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-xs font-medium text-slate-200 border border-slate-700/60 transition-colors"
             >
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Équipe & Invitations</span>
+              <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="hidden sm:inline">Équipe & Rôles</span>
             </button>
           )}
         </div>
 
         {/* Actions à droite */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Indicateur Réseau */}
-          <div
-            title={isOnline ? 'Connecté au réseau' : 'Mode Hors-ligne actif'}
-            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Indicateur Réseau (détection Wi-Fi + bascule au clic) */}
+          <button
+            type="button"
+            onClick={toggleOfflineMode}
+            title={
               isOnline
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                ? 'Connecté au Wi-Fi / Internet (Cliquez pour tester le mode Hors-ligne)'
+                : 'Mode Hors-ligne actif — Sauvegarde Local-First (Cliquez pour repasser en ligne)'
+            }
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
+              isOnline
+                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
+                : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40 ring-1 ring-amber-500/30 animate-pulse'
             }`}
           >
             {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            <span className="hidden sm:inline">{isOnline ? 'En ligne' : 'Hors ligne'}</span>
-          </div>
+            <span>{isOnline ? 'En ligne' : 'Hors ligne'}</span>
+          </button>
 
           {/* Bouton Installer PWA (si disponible) */}
           {canInstall && (
@@ -202,7 +254,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Sélecteur de Profil Utilisateur (Simulateur multi-utilisateurs pour la soutenance) */}
+          {/* Menu Profil Utilisateur */}
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
@@ -216,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-xs font-semibold text-slate-200 max-w-[80px] sm:max-w-[110px] truncate hidden xs:inline">
                 {currentUser.name}
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-700 text-slate-300">
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${roleMeta.badgeClass}`}>
                 {currentUser.role}
               </span>
             </button>
@@ -226,9 +278,32 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                   Session authentifiée
                 </div>
-                <div className="px-3 pb-2 text-xs text-slate-400 truncate">{currentUser.email}</div>
+                <div className="px-3 pb-2 text-xs text-slate-300 font-medium truncate">{currentUser.name}</div>
+                <div className="px-3 pb-2 text-[11px] text-slate-400 truncate">{currentUser.email}</div>
 
                 <div className="pt-2 mt-1 border-t border-slate-800 space-y-1">
+                  {onOpenTeamModal && (
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onOpenTeamModal();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-indigo-300 hover:bg-indigo-500/15 transition-colors"
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Gérer l&apos;équipe & les rôles</span>
+                    </button>
+                  )}
+
+                  <Link
+                    href="/onboarding"
+                    onClick={() => setShowUserMenu(false)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-emerald-300 hover:bg-emerald-500/15 transition-colors"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Rejoindre / Créer une équipe</span>
+                  </Link>
+
                   <button
                     onClick={() => {
                       onResetData();

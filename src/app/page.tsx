@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   loadStudyFlowData,
   saveStudyFlowData,
@@ -8,7 +9,33 @@ import {
   StudyFlowData,
   initialData,
 } from '@/lib/storage';
-import { Task, Subtask, Column, Milestone, Message, FileItem, ProjectReport, Activity } from '@/types';
+import {
+  Task,
+  Subtask,
+  Column,
+  Milestone,
+  Message,
+  FileItem,
+  ProjectReport,
+  Activity,
+  UserRole,
+  Training,
+  CoachingSession,
+  CoachingGoal,
+  SkillLevel,
+  TrainingMode,
+  User,
+} from '@/types';
+import {
+  applyRoleChange,
+  applyRemoveMember,
+  transferTeamOwnership,
+  createTeamWithOwner,
+  joinTeamWithToken,
+  generateInviteToken,
+  getRolePermissions,
+  ROLE_METADATA,
+} from '@/lib/user-management';
 import { Header } from '@/components/layout/Header';
 import { MobileBottomNav, ActiveTab } from '@/components/layout/MobileBottomNav';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -21,13 +48,13 @@ import { TaskModal } from '@/components/tasks/TaskModal';
 import { TeamInviteModal } from '@/components/teams/TeamInviteModal';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { TrainingCoachingView } from '@/components/training/TrainingCoachingView';
-import { UserRole, Training, CoachingSession, CoachingGoal, SkillLevel, TrainingMode } from '@/types';
-import { CheckCircle2, Shield, UserCheck, GraduationCap } from 'lucide-react';
+import { Users, PlusCircle, Shield } from 'lucide-react';
 
 export default function StudyFlowHome() {
   const [data, setData] = useState<StudyFlowData>(initialData);
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('kanban');
+  const [currentTeamId, setCurrentTeamId] = useState<string>('team-1');
   const [currentProjectId, setCurrentProjectId] = useState<string>('proj-1');
 
   // État Modales
@@ -37,9 +64,16 @@ export default function StudyFlowHome() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalDefaultColId, setModalDefaultColId] = useState<string | undefined>();
 
-  // Chargement et contrôle d'accès : redirection vers /login si non authentifié
+  // Chargement et contrôle d'accès : redirection vers /login si non authentifié, ou /onboarding si aucune équipe
   useEffect(() => {
-    fetch('/api/auth/me')
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      caches.delete('studyflow-v1.1').catch(() => {});
+    }
+
+    fetch(`/api/auth/me?t=${Date.now()}`, {
+      cache: 'no-store',
+      credentials: 'include',
+    })
       .then((res) => {
         if (!res.ok) {
           window.location.href = '/login';
@@ -54,12 +88,105 @@ export default function StudyFlowHome() {
         }
 
         const loaded = loadStudyFlowData();
-        const authUser = {
+
+        // Synchroniser les équipes, membres et projets provenant de la base Prisma
+        if (Array.isArray(resData.memberships)) {
+          for (const tm of resData.memberships) {
+            if (tm.team) {
+              const existingTeamIdx = loaded.teams.findIndex((t) => t.id === tm.team.id);
+              const syncedTeam = {
+                id: tm.team.id,
+                name: tm.team.name,
+                description: tm.team.description,
+                slug: tm.team.slug,
+                ownerId: tm.team.ownerId,
+                inviteToken: tm.team.inviteToken,
+                createdAt: tm.team.createdAt,
+              };
+              if (existingTeamIdx === -1) {
+                loaded.teams.push(syncedTeam);
+              } else {
+                loaded.teams[existingTeamIdx] = syncedTeam;
+              }
+
+              if (Array.isArray(tm.team.members)) {
+                for (const m of tm.team.members) {
+                  if (m.user && !loaded.users.some((u) => u.id === m.user.id)) {
+                    loaded.users.push(m.user);
+                  }
+                  const memIdx = loaded.members.findIndex(
+                    (em) => em.teamId === m.teamId && em.userId === m.userId
+                  );
+                  const syncedMem = {
+                    id: m.id,
+                    teamId: m.teamId,
+                    userId: m.userId,
+                    role: m.role as UserRole,
+                    joinedAt: m.joinedAt,
+                  };
+                  if (memIdx === -1) {
+                    loaded.members.push(syncedMem);
+                  } else {
+                    loaded.members[memIdx] = syncedMem;
+                  }
+                }
+              }
+
+              if (Array.isArray(tm.team.projects)) {
+                for (const p of tm.team.projects) {
+                  if (!loaded.projects.some((ep) => ep.id === p.id)) {
+                    loaded.projects.push({
+                      id: p.id,
+                      teamId: p.teamId,
+                      name: p.name,
+                      description: p.description,
+                      color: p.color,
+                      startDate: p.startDate,
+                      endDate: p.endDate,
+                    });
+                  }
+                  if (Array.isArray(p.columns)) {
+                    for (const col of p.columns) {
+                      if (!loaded.columns.some((ec) => ec.id === col.id)) {
+                        loaded.columns.push(col);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        const userMemberships = loaded.members.filter((m) => m.userId === resData.user.id);
+        if (resData.needsOnboarding && userMemberships.length === 0) {
+          window.location.href = '/onboarding';
+          return;
+        }
+
+        const savedTeamId = localStorage.getItem('studyflow_active_team_id');
+        const activeTeamId =
+          savedTeamId && userMemberships.some((m) => m.teamId === savedTeamId)
+            ? savedTeamId
+            : userMemberships[0]?.teamId || loaded.teams[0]?.id || 'team-1';
+
+        const activeMembership = loaded.members.find(
+          (m) => m.teamId === activeTeamId && m.userId === resData.user.id
+        );
+        const activeTeamObj = loaded.teams.find((t) => t.id === activeTeamId);
+        const resolvedRole: UserRole =
+          activeTeamObj?.ownerId === resData.user.id
+            ? 'OWNER'
+            : activeMembership?.role || resData.user.role || 'MEMBER';
+
+        const authUser: User = {
           id: resData.user.id,
           name: resData.user.name,
           email: resData.user.email,
-          avatar: resData.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          role: resData.user.role || 'MEMBER',
+          avatar:
+            resData.user.image ||
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          role: resolvedRole,
           joinedAt: new Date().toISOString(),
         };
 
@@ -72,13 +199,28 @@ export default function StudyFlowHome() {
 
         saveStudyFlowData(loaded);
         setData(loaded);
+        setCurrentTeamId(activeTeamId);
 
-        if (loaded.projects.length > 0) {
+        const teamProjects = loaded.projects.filter((p) => p.teamId === activeTeamId);
+        if (teamProjects.length > 0) {
+          setCurrentProjectId(teamProjects[0].id);
+        } else if (loaded.projects.length > 0) {
           setCurrentProjectId(loaded.projects[0].id);
         }
         setIsLoaded(true);
       })
       .catch(() => {
+        // En mode Hors-ligne, conserver la session locale sans rediriger vers /login
+        const fallbackStore = loadStudyFlowData();
+        if (fallbackStore?.currentUser) {
+          setData(fallbackStore);
+          const savedTeamId = localStorage.getItem('studyflow_active_team_id');
+          if (savedTeamId && fallbackStore.teams.some((t) => t.id === savedTeamId)) {
+            setCurrentTeamId(savedTeamId);
+          }
+          setIsLoaded(true);
+          return;
+        }
         window.location.href = '/login';
       });
   }, []);
@@ -92,16 +234,83 @@ export default function StudyFlowHome() {
     });
   };
 
+  const currentTeam =
+    data.teams.find((t) => t.id === currentTeamId) || data.teams[0] || initialData.teams[0];
+
+  // Rôle effectif de l'utilisateur dans l'équipe active
+  const currentMembership = data.members.find(
+    (m) => m.teamId === currentTeam.id && m.userId === data.currentUser.id
+  );
+  const effectiveUserRole: UserRole =
+    currentTeam.ownerId === data.currentUser.id
+      ? 'OWNER'
+      : currentMembership?.role || data.currentUser.role || 'MEMBER';
+
+  const effectiveCurrentUser: User = {
+    ...data.currentUser,
+    role: effectiveUserRole,
+  };
+
+  const rolePerms = getRolePermissions(effectiveUserRole);
+
+  // Membres de l'équipe courante avec leurs rôles respectifs dans cette équipe
+  const teamMemberRecords = data.members.filter((m) => m.teamId === currentTeam.id);
+  const teamUsers: User[] =
+    teamMemberRecords.length > 0
+      ? teamMemberRecords
+          .map((m) => {
+            const u = data.users.find((usr) => usr.id === m.userId);
+            return u ? { ...u, role: m.role } : null;
+          })
+          .filter((u): u is User => u !== null)
+      : data.users;
+
+  // Projets de l'équipe courante
+  const teamProjects = data.projects.filter((p) => p.teamId === currentTeam.id);
+  const activeProjectsList = teamProjects.length > 0 ? teamProjects : data.projects;
+
   const currentProject =
-    data.projects.find((p) => p.id === currentProjectId) || data.projects[0] || initialData.projects[0];
+    activeProjectsList.find((p) => p.id === currentProjectId) ||
+    activeProjectsList[0] ||
+    initialData.projects[0];
+
   const currentColumns = data.columns.filter((c) => c.projectId === currentProject.id);
   const currentTasks = data.tasks.filter((t) => t.projectId === currentProject.id);
   const currentMilestones = data.milestones.filter((m) => m.projectId === currentProject.id);
   const currentFiles = data.files.filter((f) => f.projectId === currentProject.id);
   const currentActivities = data.activities.filter((a) => a.projectId === currentProject.id);
 
+  // Changement d'équipe active
+  const handleSelectTeam = (teamId: string) => {
+    setCurrentTeamId(teamId);
+    localStorage.setItem('studyflow_active_team_id', teamId);
+
+    const targetTeam = data.teams.find((t) => t.id === teamId);
+    const membership = data.members.find(
+      (m) => m.teamId === teamId && m.userId === data.currentUser.id
+    );
+    const nextRole: UserRole =
+      targetTeam?.ownerId === data.currentUser.id
+        ? 'OWNER'
+        : membership?.role || 'MEMBER';
+
+    updateData((prev) => ({
+      ...prev,
+      currentUser: { ...prev.currentUser, role: nextRole },
+    }));
+
+    const projs = data.projects.filter((p) => p.teamId === teamId);
+    if (projs.length > 0) {
+      setCurrentProjectId(projs[0].id);
+    }
+  };
+
   // GESTION DU CRUD TÂCHES
   const handleOpenTaskModal = (task: Task | null, columnId?: string) => {
+    if (!task && !rolePerms.canWriteTasks) {
+      alert(`Votre rôle (${effectiveUserRole}) est en lecture seule sur les tâches Kanban.`);
+      return;
+    }
     setSelectedTask(task);
     setModalDefaultColId(columnId || currentColumns[0]?.id);
     setIsModalOpen(true);
@@ -116,6 +325,11 @@ export default function StudyFlowHome() {
     taskData: Partial<Task>,
     subtasksData: { title: string; done: boolean }[]
   ) => {
+    if (!rolePerms.canWriteTasks) {
+      alert(`Action réservée aux rôles OWNER, ADMIN et MEMBER.`);
+      return;
+    }
+
     updateData((prev) => {
       let updatedTasks = [...prev.tasks];
       let updatedSubtasks = [...prev.subtasks];
@@ -123,7 +337,6 @@ export default function StudyFlowHome() {
       let targetTaskId = taskData.id;
 
       if (taskData.id) {
-        // Mise à jour de tâche existante (UPDATE)
         updatedTasks = updatedTasks.map((t) =>
           t.id === taskData.id
             ? ({
@@ -137,7 +350,6 @@ export default function StudyFlowHome() {
             : t
         );
 
-        // Remplacer les sous-tâches de cette tâche
         updatedSubtasks = updatedSubtasks.filter((s) => s.taskId !== taskData.id);
         const newSubs: Subtask[] = subtasksData.map((st, index) => ({
           id: `sub-${Date.now()}-${index}`,
@@ -148,7 +360,6 @@ export default function StudyFlowHome() {
         }));
         updatedSubtasks.push(...newSubs);
       } else {
-        // Création d'une nouvelle tâche (CREATE)
         targetTaskId = `task-${Date.now()}`;
         const newTask: Task = {
           id: targetTaskId,
@@ -175,7 +386,6 @@ export default function StudyFlowHome() {
         }));
         updatedSubtasks.push(...newSubs);
 
-        // Journal d'activité (M7 Cahier des charges)
         updatedActivities.unshift({
           id: `act-${Date.now()}`,
           projectId: currentProject.id,
@@ -199,6 +409,7 @@ export default function StudyFlowHome() {
   };
 
   const handleDeleteTask = (taskId: string) => {
+    if (!rolePerms.canWriteTasks) return;
     updateData((prev) => ({
       ...prev,
       tasks: prev.tasks.filter((t) => t.id !== taskId),
@@ -208,6 +419,7 @@ export default function StudyFlowHome() {
   };
 
   const handleDuplicateTask = (taskId: string) => {
+    if (!rolePerms.canWriteTasks) return;
     const original = data.tasks.find((t) => t.id === taskId);
     if (!original) return;
 
@@ -239,6 +451,7 @@ export default function StudyFlowHome() {
   };
 
   const handleMoveTask = (taskId: string, targetColumnId: string) => {
+    if (!rolePerms.canWriteTasks) return;
     updateData((prev) => {
       const targetCol = prev.columns.find((c) => c.id === targetColumnId);
       const movingTask = prev.tasks.find((t) => t.id === taskId);
@@ -279,6 +492,7 @@ export default function StudyFlowHome() {
   };
 
   const handleToggleSubtask = (subtaskId: string) => {
+    if (!rolePerms.canWriteTasks) return;
     updateData((prev) => ({
       ...prev,
       subtasks: prev.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s)),
@@ -287,6 +501,7 @@ export default function StudyFlowHome() {
 
   // CHAT & FICHIERS
   const handleSendMessage = (content: string) => {
+    if (!rolePerms.canPostMessages) return;
     const newMsg: Message = {
       id: `msg-${Date.now()}`,
       channelId: currentProject.id,
@@ -385,6 +600,8 @@ export default function StudyFlowHome() {
     if (confirm('Réinitialiser toutes les données aux valeurs de démo du Cahier des Charges ?')) {
       const reset = resetToDemoData();
       setData(reset);
+      setCurrentTeamId('team-1');
+      setCurrentProjectId('proj-1');
     }
   };
 
@@ -397,18 +614,298 @@ export default function StudyFlowHome() {
     }));
   };
 
+  // ==========================================
+  // MOTEUR DE GESTION UTILISATEURS & ÉQUIPES (Module 1)
+  // ==========================================
   const handleUpdateRole = (userId: string, newRole: UserRole) => {
-    updateData((prev) => ({
-      ...prev,
-      users: prev.users.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
-    }));
+    fetch(`/api/teams/${currentTeam.id}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_role', userId, role: newRole }),
+    }).catch(() => null);
+
+    updateData((prev) => {
+      const res = applyRoleChange(prev.members, {
+        actorId: prev.currentUser.id,
+        targetId: userId,
+        newRole,
+        team: currentTeam,
+      });
+      if (!res.ok) {
+        alert(res.error);
+        return prev;
+      }
+      return {
+        ...prev,
+        members: res.members,
+        users: prev.users.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
+      };
+    });
   };
 
   const handleRemoveMember = (userId: string) => {
+    fetch(`/api/teams/${currentTeam.id}/members?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    }).catch(() => null);
+
+    updateData((prev) => {
+      const res = applyRemoveMember(prev.members, {
+        actorId: prev.currentUser.id,
+        targetId: userId,
+        team: currentTeam,
+      });
+      if (!res.ok) {
+        alert(res.error);
+        return prev;
+      }
+
+      // Si l'utilisateur quitte lui-même l'équipe
+      if (userId === prev.currentUser.id) {
+        const remainingTeams = res.members.filter((m) => m.userId === prev.currentUser.id);
+        if (remainingTeams.length > 0) {
+          setTimeout(() => handleSelectTeam(remainingTeams[0].teamId), 50);
+        } else {
+          setTimeout(() => {
+            window.location.href = '/onboarding';
+          }, 100);
+        }
+      }
+
+      return {
+        ...prev,
+        members: res.members,
+      };
+    });
+  };
+
+  const handleTransferOwnership = (newOwnerId: string) => {
+    fetch(`/api/teams/${currentTeam.id}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'transfer_ownership', newOwnerId }),
+    }).catch(() => null);
+
+    updateData((prev) => {
+      const res = transferTeamOwnership(currentTeam, prev.members, {
+        actorId: prev.currentUser.id,
+        newOwnerId,
+      });
+      if (!res.ok) {
+        alert(res.error);
+        return prev;
+      }
+
+      return {
+        ...prev,
+        teams: prev.teams.map((t) => (t.id === currentTeam.id ? res.team : t)),
+        members: res.members,
+        currentUser: { ...prev.currentUser, role: 'ADMIN' },
+        users: prev.users.map((u) => {
+          if (u.id === newOwnerId) return { ...u, role: 'OWNER' as UserRole };
+          if (u.id === prev.currentUser.id) return { ...u, role: 'ADMIN' as UserRole };
+          return u;
+        }),
+      };
+    });
+  };
+
+  const handleInviteMember = (params: { name: string; email: string; role: UserRole }) => {
+    fetch(`/api/teams/${currentTeam.id}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((apiRes) => {
+        updateData((prev) => {
+          const existingUser = prev.users.find(
+            (u) => u.email.toLowerCase() === params.email.toLowerCase()
+          );
+          const targetUser: User =
+            apiRes?.member?.user ||
+            existingUser || {
+              id: `user-${Date.now()}`,
+              name: params.name,
+              email: params.email.toLowerCase(),
+              avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 1000)}?w=150`,
+              role: params.role,
+              joinedAt: new Date().toISOString(),
+            };
+
+          const nextUsers = prev.users.some((u) => u.id === targetUser.id)
+            ? prev.users
+            : [...prev.users, targetUser];
+
+          const alreadyInTeam = prev.members.some(
+            (m) => m.teamId === currentTeam.id && m.userId === targetUser.id
+          );
+          const nextMembers = alreadyInTeam
+            ? prev.members
+            : [
+                ...prev.members,
+                {
+                  id: apiRes?.member?.id || `tm-${Date.now()}`,
+                  teamId: currentTeam.id,
+                  userId: targetUser.id,
+                  role: params.role,
+                  joinedAt: new Date().toISOString(),
+                },
+              ];
+
+          return {
+            ...prev,
+            users: nextUsers,
+            members: nextMembers,
+          };
+        });
+      });
+  };
+
+  const handleRegenerateToken = async () => {
+    const res = await fetch(`/api/teams/${currentTeam.id}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'regenerate_token' }),
+    }).catch(() => null);
+
+    const apiData = res && res.ok ? await res.json().catch(() => null) : null;
+    const newToken = apiData?.inviteToken || generateInviteToken();
+
     updateData((prev) => ({
       ...prev,
-      users: prev.users.filter((u) => u.id !== userId),
+      teams: prev.teams.map((t) =>
+        t.id === currentTeam.id ? { ...t, inviteToken: newToken } : t
+      ),
     }));
+    return newToken;
+  };
+
+  const handleUpdateTeamSettings = (params: { name: string; description: string }) => {
+    fetch(`/api/teams/${currentTeam.id}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_team', ...params }),
+    }).catch(() => null);
+
+    updateData((prev) => ({
+      ...prev,
+      teams: prev.teams.map((t) =>
+        t.id === currentTeam.id
+          ? { ...t, name: params.name, description: params.description }
+          : t
+      ),
+    }));
+  };
+
+  const handleCreateNewTeam = (params: {
+    name: string;
+    description: string;
+    projectName?: string;
+  }) => {
+    fetch('/api/teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((apiData) => {
+        const localCreated = createTeamWithOwner({
+          name: params.name,
+          description: params.description,
+          projectName: params.projectName,
+          owner: data.currentUser,
+          existingTeams: data.teams,
+        });
+
+        const finalTeam = apiData?.team || localCreated.team;
+        const finalMem = apiData?.membership || {
+          ...localCreated.membership,
+          teamId: finalTeam.id,
+        };
+        const finalProj = apiData?.project || {
+          ...localCreated.defaultProject,
+          teamId: finalTeam.id,
+        };
+        const finalCols =
+          Array.isArray(apiData?.columns) && apiData.columns.length > 0
+            ? apiData.columns
+            : localCreated.defaultColumns.map((c) => ({ ...c, projectId: finalProj.id }));
+
+        updateData((prev) => ({
+          ...prev,
+          teams: [finalTeam, ...prev.teams],
+          members: [...prev.members, finalMem],
+          projects: [finalProj, ...prev.projects],
+          columns: [...prev.columns, ...finalCols],
+          currentUser: { ...prev.currentUser, role: 'OWNER' },
+        }));
+
+        setCurrentTeamId(finalTeam.id);
+        setCurrentProjectId(finalProj.id);
+        localStorage.setItem('studyflow_active_team_id', finalTeam.id);
+      });
+  };
+
+  const handleJoinTeamByToken = async (
+    token: string
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const res = await fetch('/api/teams/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }).catch(() => null);
+
+    const apiData = res ? await res.json().catch(() => null) : null;
+    const localJoin = joinTeamWithToken({
+      token,
+      user: data.currentUser,
+      teams: data.teams,
+      members: data.members,
+    });
+
+    if ((!res || !res.ok) && !localJoin.ok) {
+      return {
+        ok: false,
+        error: apiData?.error || localJoin.error || 'Code d’invitation introuvable.',
+      };
+    }
+
+    const joinedTeam = apiData?.team || localJoin.team!;
+    const joinedRole: UserRole =
+      apiData?.membership?.role || localJoin.membership?.role || 'MEMBER';
+
+    updateData((prev) => {
+      const nextTeams = prev.teams.some((t) => t.id === joinedTeam.id)
+        ? prev.teams
+        : [...prev.teams, joinedTeam];
+      const nextMembers = prev.members.some(
+        (m) => m.teamId === joinedTeam.id && m.userId === prev.currentUser.id
+      )
+        ? prev.members
+        : [
+            ...prev.members,
+            {
+              id: apiData?.membership?.id || localJoin.membership?.id || `tm-${Date.now()}`,
+              teamId: joinedTeam.id,
+              userId: prev.currentUser.id,
+              role: joinedRole,
+              joinedAt: new Date().toISOString(),
+            },
+          ];
+
+      return {
+        ...prev,
+        teams: nextTeams,
+        members: nextMembers,
+        currentUser: { ...prev.currentUser, role: joinedRole },
+      };
+    });
+
+    setCurrentTeamId(joinedTeam.id);
+    localStorage.setItem('studyflow_active_team_id', joinedTeam.id);
+    return { ok: true };
   };
 
   const handleCreateProject = (
@@ -418,6 +915,7 @@ export default function StudyFlowHome() {
     const newProjId = `proj-${Date.now()}`;
     const newProject = {
       ...newProjectData,
+      teamId: currentTeam.id,
       id: newProjId,
     };
 
@@ -449,6 +947,7 @@ export default function StudyFlowHome() {
   };
 
   const handleAddColumn = (name: string, wipLimit?: number) => {
+    if (!rolePerms.canManageColumns) return;
     const newCol: Column = {
       id: `col-${Date.now()}`,
       projectId: currentProject.id,
@@ -472,13 +971,22 @@ export default function StudyFlowHome() {
       const training = prev.trainings.find((t) => t.id === trainingId);
       if (!training) return prev;
 
-      const currentCount = prev.enrollments.filter((e) => e.trainingId === trainingId && e.status === 'ENROLLED').length;
+      const currentCount = prev.enrollments.filter(
+        (e) => e.trainingId === trainingId && e.status === 'ENROLLED'
+      ).length;
       if (currentCount >= training.capacity) {
         alert('Cette formation est complète ! Capacité maximale atteinte.');
         return prev;
       }
 
-      if (prev.enrollments.some((e) => e.trainingId === trainingId && e.userId === prev.currentUser.id && e.status === 'ENROLLED')) {
+      if (
+        prev.enrollments.some(
+          (e) =>
+            e.trainingId === trainingId &&
+            e.userId === prev.currentUser.id &&
+            e.status === 'ENROLLED'
+        )
+      ) {
         return prev;
       }
 
@@ -520,6 +1028,7 @@ export default function StudyFlowHome() {
   const handleCreateTraining = (trainingData: Omit<Training, 'id' | 'createdAt'>) => {
     const newTraining: Training = {
       ...trainingData,
+      teamId: currentTeam.id,
       id: `tr-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
@@ -548,7 +1057,7 @@ export default function StudyFlowHome() {
   }) => {
     const newSession: CoachingSession = {
       id: `cs-${Date.now()}`,
-      teamId: 'team-1',
+      teamId: currentTeam.id,
       projectId: currentProject.id,
       coachId: sessionData.coachId,
       coacheeId: data.currentUser.id,
@@ -616,6 +1125,7 @@ export default function StudyFlowHome() {
   const handleCreateGoal = (goalData: Omit<CoachingGoal, 'id' | 'createdAt'>) => {
     const newGoal: CoachingGoal = {
       ...goalData,
+      teamId: currentTeam.id,
       id: `cg-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
@@ -644,7 +1154,7 @@ export default function StudyFlowHome() {
       const newAssessment: SkillLevel = {
         id: `sk-${Date.now()}`,
         userId,
-        teamId: 'team-1',
+        teamId: currentTeam.id,
         skill,
         level,
         selfAssessed: false,
@@ -666,20 +1176,29 @@ export default function StudyFlowHome() {
           <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center font-bold text-white shadow-xl animate-pulse">
             SF
           </div>
-          <span className="text-xs font-semibold tracking-wider text-slate-400">Chargement de StudyFlow...</span>
+          <span className="text-xs font-semibold tracking-wider text-slate-400">
+            Chargement de StudyFlow...
+          </span>
         </div>
       </div>
     );
   }
 
+  const userTeams = data.teams.filter((t) =>
+    data.members.some((m) => m.teamId === t.id && m.userId === data.currentUser.id)
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       {/* Barre Supérieure Responsive */}
       <Header
+        currentTeam={currentTeam}
+        teams={userTeams.length > 0 ? userTeams : data.teams}
+        onSelectTeam={handleSelectTeam}
         currentProject={currentProject}
-        projects={data.projects}
+        projects={activeProjectsList}
         onSelectProject={(id) => setCurrentProjectId(id)}
-        currentUser={data.currentUser}
+        currentUser={effectiveCurrentUser}
         notifications={data.notifications}
         onMarkNotificationRead={handleMarkNotificationRead}
         onResetData={handleResetData}
@@ -687,37 +1206,57 @@ export default function StudyFlowHome() {
         onOpenProjectModal={() => setIsProjectModalOpen(true)}
       />
 
-      {/* Barre de Persona & Rôle Actif */}
-      <div className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-2.5">
-        <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
+      {/* Barre de Session, Équipe Active & Moteur de Rôles (OWNER, ADMIN, COACH, MEMBER, VIEWER) */}
+      <div className="bg-slate-900/90 border-b border-slate-800/80 px-3 sm:px-6 py-2">
+        <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               Session :
             </span>
             <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700/80">
               <img
-                src={data.currentUser.avatar}
-                alt={data.currentUser.name}
+                src={effectiveCurrentUser.avatar}
+                alt={effectiveCurrentUser.name}
                 className="w-5 h-5 rounded-full object-cover ring-1 ring-indigo-400"
               />
-              <span className="text-xs font-bold text-white">{data.currentUser.name}</span>
+              <span className="text-xs font-bold text-white">{effectiveCurrentUser.name}</span>
               <span
                 className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
-                  data.currentUser.role === 'OWNER'
-                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                    : data.currentUser.role === 'ADMIN'
-                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                    : data.currentUser.role === 'COACH'
-                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  ROLE_METADATA[effectiveUserRole]?.badgeClass || ROLE_METADATA.MEMBER.badgeClass
                 }`}
               >
-                {data.currentUser.role}
+                {effectiveUserRole}
+              </span>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300">
+              <Users className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="font-semibold text-white">{currentTeam.name}</span>
+              <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                {currentTeam.inviteToken}
               </span>
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsTeamModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Gérer Membres & Rôles</span>
+            </button>
+
+            <Link
+              href="/onboarding"
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Rejoindre / Créer une équipe</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -728,9 +1267,9 @@ export default function StudyFlowHome() {
             columns={currentColumns}
             tasks={currentTasks}
             subtasks={data.subtasks}
-            users={data.users}
+            users={teamUsers}
             labels={data.labels.filter((l) => l.projectId === currentProject.id)}
-            currentUser={data.currentUser}
+            currentUser={effectiveCurrentUser}
             onOpenTaskModal={handleOpenTaskModal}
             onMoveTask={handleMoveTask}
             onAddColumn={handleAddColumn}
@@ -742,9 +1281,9 @@ export default function StudyFlowHome() {
             tasks={currentTasks}
             subtasks={data.subtasks}
             columns={currentColumns}
-            users={data.users}
+            users={teamUsers}
             labels={data.labels.filter((l) => l.projectId === currentProject.id)}
-            currentUser={data.currentUser}
+            currentUser={effectiveCurrentUser}
             onOpenTaskModal={handleOpenTaskModal}
             onToggleSubtask={handleToggleSubtask}
             onDeleteTask={handleDeleteTask}
@@ -756,10 +1295,10 @@ export default function StudyFlowHome() {
             tasks={currentTasks}
             milestones={currentMilestones}
             columns={currentColumns}
-            users={data.users}
+            users={teamUsers}
             trainings={data.trainings}
             coachingSessions={data.coachingSessions}
-            currentUserId={data.currentUser.id}
+            currentUserId={effectiveCurrentUser.id}
             onOpenTaskModal={(t) => handleOpenTaskModal(t)}
             onAddMilestone={handleAddMilestone}
             onToggleMilestone={handleToggleMilestone}
@@ -771,8 +1310,8 @@ export default function StudyFlowHome() {
           <ProjectChatView
             project={currentProject}
             messages={data.messages.filter((m) => m.channelId === currentProject.id)}
-            users={data.users}
-            currentUser={data.currentUser}
+            users={teamUsers}
+            currentUser={effectiveCurrentUser}
             files={currentFiles}
             onSendMessage={handleSendMessage}
             onUploadFile={handleUploadFile}
@@ -787,8 +1326,8 @@ export default function StudyFlowHome() {
             coachingSessions={data.coachingSessions}
             coachingGoals={data.coachingGoals}
             skillLevels={data.skillLevels}
-            users={data.users}
-            currentUser={data.currentUser}
+            users={teamUsers}
+            currentUser={effectiveCurrentUser}
             onEnrollTraining={handleEnrollTraining}
             onUnenrollTraining={handleUnenrollTraining}
             onCreateTraining={handleCreateTraining}
@@ -807,7 +1346,7 @@ export default function StudyFlowHome() {
             project={currentProject}
             tasks={currentTasks}
             columns={currentColumns}
-            users={data.users}
+            users={teamUsers}
             activities={currentActivities}
             reports={data.reports.filter((r) => r.projectId === currentProject.id)}
             onGenerateReport={handleGenerateReport}
@@ -819,7 +1358,7 @@ export default function StudyFlowHome() {
             project={currentProject}
             tasks={currentTasks}
             columns={currentColumns}
-            users={data.users}
+            users={teamUsers}
             subtasks={data.subtasks}
             onCreateTaskFromAi={(taskData, subs) => handleSaveTask(taskData, subs)}
           />
@@ -831,7 +1370,7 @@ export default function StudyFlowHome() {
         <TaskModal
           task={selectedTask}
           columns={currentColumns}
-          users={data.users}
+          users={teamUsers}
           labels={data.labels.filter((l) => l.projectId === currentProject.id)}
           subtasks={data.subtasks}
           currentColumnId={modalDefaultColId}
@@ -842,15 +1381,24 @@ export default function StudyFlowHome() {
         />
       )}
 
-      {/* Modale Gestion d'Équipe & Invitations (Module 1) */}
+      {/* Modale Moteur de Gestion Utilisateurs, Équipe & Invitations (Module 1) */}
       {isTeamModalOpen && (
         <TeamInviteModal
-          team={data.teams[0] || initialData.teams[0]}
+          team={currentTeam}
+          teams={data.teams}
+          members={data.members}
           users={data.users}
-          currentUser={data.currentUser}
+          currentUser={effectiveCurrentUser}
           onClose={() => setIsTeamModalOpen(false)}
+          onSelectTeam={handleSelectTeam}
           onUpdateRole={handleUpdateRole}
           onRemoveMember={handleRemoveMember}
+          onTransferOwnership={handleTransferOwnership}
+          onInviteMember={handleInviteMember}
+          onRegenerateToken={handleRegenerateToken}
+          onUpdateTeamSettings={handleUpdateTeamSettings}
+          onCreateNewTeam={handleCreateNewTeam}
+          onJoinTeamByToken={handleJoinTeamByToken}
         />
       )}
 

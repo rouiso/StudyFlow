@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       include: {
         teamMembers: {
           include: { team: true },
+          orderBy: { joinedAt: 'desc' },
         },
       },
     });
@@ -31,9 +32,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const needsOnboarding = user.teamMembers.length === 0;
+
     // Création de la réponse avec cookie de session
     const response = NextResponse.json({
       ok: true,
+      needsOnboarding,
       user: {
         id: user.id,
         name: user.name,

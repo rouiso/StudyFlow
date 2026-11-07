@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { assertPermission } from '@/lib/permissions';
+import { assertPermission, getCurrentUser } from '@/lib/permissions';
 import { calculateBetween } from '@/lib/position';
 
 export type ActionResponse<T> =
@@ -23,7 +23,7 @@ export async function createTaskAction(params: {
   try {
     await assertPermission('task.create', { projectId: params.projectId });
 
-    const user = await prisma.user.findFirst();
+    const user = await getCurrentUser();
     const createdById = user ? user.id : 'user-1';
 
     const task = await prisma.task.create({
@@ -36,9 +36,12 @@ export async function createTaskAction(params: {
         priority: params.priority || 'NORMALE',
         dueDate: params.dueDate ? new Date(params.dueDate) : null,
         createdById,
-        assignees: params.assigneeIds && params.assigneeIds.length > 0 ? {
-          create: params.assigneeIds.map((userId) => ({ userId })),
-        } : undefined,
+        assignees:
+          params.assigneeIds && params.assigneeIds.length > 0
+            ? {
+                create: params.assigneeIds.map((userId) => ({ userId })),
+              }
+            : undefined,
       },
       include: {
         subtasks: true,
@@ -81,6 +84,8 @@ export async function moveTaskAction(params: {
       return { ok: false, error: { code: 'COLUMN_NOT_FOUND', message: 'Colonne introuvable' } };
     }
 
+    await assertPermission('task.move', { projectId: targetColumn.projectId });
+
     const newPosition = calculateBetween(params.beforePosition, params.afterPosition);
 
     const updatedTask = await prisma.task.update({
@@ -103,6 +108,10 @@ export async function moveTaskAction(params: {
  */
 export async function deleteTaskAction(taskId: string): Promise<ActionResponse<any>> {
   try {
+    const existing = await prisma.task.findUnique({ where: { id: taskId } });
+    if (existing) {
+      await assertPermission('task.delete', { projectId: existing.projectId });
+    }
     await prisma.task.delete({ where: { id: taskId } });
     return { ok: true, data: { id: taskId } };
   } catch (err: any) {
