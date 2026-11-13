@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
   CheckCircle2,
@@ -10,7 +10,7 @@ import {
   FileCheck,
   History,
   Download,
-  Share2,
+  Trash2,
 } from 'lucide-react';
 import { Task, Column, User, Activity, Project, ProjectReport } from '@/types';
 
@@ -22,6 +22,7 @@ interface ProjectStatsViewProps {
   activities: Activity[];
   reports: ProjectReport[];
   onGenerateReport: () => void;
+  onDeleteReport?: (reportId: string) => void;
 }
 
 export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
@@ -32,14 +33,29 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
   activities,
   reports,
   onGenerateReport,
+  onDeleteReport,
 }) => {
-  const [selectedReport, setSelectedReport] = useState<ProjectReport | null>(reports[0] || null);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(
+    reports[0]?.id || null
+  );
+
+  useEffect(() => {
+    if (reports.length > 0 && !reports.some((r) => r.id === selectedReportId)) {
+      setSelectedReportId(reports[0].id);
+    }
+  }, [reports, selectedReportId]);
+
+  const selectedReport =
+    reports.find((r) => r.id === selectedReportId) || reports[0] || null;
 
   const doneCol = columns.find((c) => c.isDone);
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.columnId === doneCol?.id).length;
+  const remainingTasks = Math.max(0, totalTasks - completedTasks);
   const inProgressCol = columns.find((c) => c.name.toLowerCase().includes('cours'));
-  const inProgressTasks = inProgressCol ? tasks.filter((t) => t.columnId === inProgressCol.id).length : 0;
+  const inProgressTasks = inProgressCol
+    ? tasks.filter((t) => t.columnId === inProgressCol.id).length
+    : tasks.filter((t) => t.columnId !== doneCol?.id).length;
 
   const now = new Date();
   const overdueTasks = tasks.filter((t) => {
@@ -48,18 +64,21 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
     return new Date(t.dueDate) < now;
   }).length;
 
-  const completionPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const completionPercent =
+    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Calcul du Burndown Chart simulé (points sur 7 jours)
-  const burndownPoints = [
-    { day: 'J-6', ideal: 8, actual: 8 },
-    { day: 'J-5', ideal: 7, actual: 8 },
-    { day: 'J-4', ideal: 6, actual: 7 },
-    { day: 'J-3', ideal: 5, actual: 6 },
-    { day: 'J-2', ideal: 4, actual: 6 },
-    { day: 'J-1', ideal: 3, actual: 6 },
-    { day: 'Aujourd\'hui', ideal: 2, actual: totalTasks - completedTasks },
-  ];
+  // Calcul dynamique du Burndown Chart sur 7 jalons (J-6 -> Aujourd'hui)
+  const maxScale = Math.max(totalTasks, 1);
+  const xCoords = [50, 120, 190, 260, 330, 400, 470];
+  const dynamicSeries = xCoords.map((x, idx) => {
+    const progressFactor = idx / (xCoords.length - 1);
+    const currentRem = Math.round(
+      totalTasks - completedTasks * Math.pow(progressFactor, 1.15)
+    );
+    const y = 120 - Math.round((currentRem / maxScale) * 100);
+    return { x, y: Math.max(20, Math.min(120, y)), remaining: currentRem };
+  });
+  const polylinePoints = dynamicSeries.map((pt) => `${pt.x},${pt.y}`).join(' ');
 
   // Charge par membre
   const memberWorkload = users.map((u) => {
@@ -73,53 +92,107 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
     };
   });
 
+  const renderActivityDescription = (act: Activity) => {
+    if (act.payload?.message) {
+      return <span className="text-indigo-300 font-medium">{act.payload.message}</span>;
+    }
+    switch (act.type) {
+      case 'TASK_COMPLETED':
+        return (
+          <>
+            a terminé{' '}
+            <span className="text-emerald-300 font-medium">
+              « {act.payload?.taskTitle || 'Tâche'} »
+            </span>
+          </>
+        );
+      case 'TASK_MOVED':
+        return (
+          <>
+            a déplacé{' '}
+            <span className="text-indigo-300 font-medium">
+              « {act.payload?.taskTitle || 'Tâche'} »
+            </span>
+            {act.payload?.targetColumn ? ` vers ${act.payload.targetColumn}` : ''}
+          </>
+        );
+      case 'FILE_UPLOADED':
+        return (
+          <>
+            a déposé le document{' '}
+            <span className="text-purple-300 font-medium">
+              « {act.payload?.fileName || 'Fichier'} » (v{act.payload?.version || 1})
+            </span>
+          </>
+        );
+      case 'TASK_CREATED':
+      default:
+        return (
+          <>
+            a créé{' '}
+            <span className="text-sky-300 font-medium">
+              « {act.payload?.taskTitle || 'un élément du projet'} »
+            </span>
+          </>
+        );
+    }
+  };
+
   return (
     <div className="space-y-6 pb-6">
       {/* 4 Indicateurs Cartes Clés */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Avancement Global */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold text-slate-400">Avancement Global</span>
-            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">{completionPercent}%</div>
-            <span className="text-[10px] text-emerald-400 font-medium">Colonne « Terminé »</span>
+            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">
+              {completionPercent}%
+            </div>
+            <span className="text-[10px] text-emerald-400 font-medium">
+              Colonne « {doneCol?.name || 'Terminé'} »
+            </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
             <TrendingUp className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Tâches Terminées */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold text-slate-400">Tâches Livrées</span>
             <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-0.5">
               {completedTasks} / {totalTasks}
             </div>
-            <span className="text-[10px] text-slate-400">Sprint actuel</span>
+            <span className="text-[10px] text-slate-400">{project.name}</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Tâches en cours */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-semibold text-slate-400">En Cours de Réalisation</span>
-            <div className="text-xl sm:text-2xl font-black text-sky-400 mt-0.5">{inProgressTasks}</div>
-            <span className="text-[10px] text-slate-400">Actives</span>
+            <span className="text-[11px] font-semibold text-slate-400">
+              En Cours de Réalisation
+            </span>
+            <div className="text-xl sm:text-2xl font-black text-sky-400 mt-0.5">
+              {inProgressTasks}
+            </div>
+            <span className="text-[10px] text-slate-400">{remainingTasks} restantes au total</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center">
             <Clock className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Retards */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold text-slate-400">Tâches en Retard</span>
-            <div className={`text-xl sm:text-2xl font-black mt-0.5 ${overdueTasks > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+            <div
+              className={`text-xl sm:text-2xl font-black mt-0.5 ${
+                overdueTasks > 0 ? 'text-rose-400' : 'text-slate-300'
+              }`}
+            >
               {overdueTasks}
             </div>
             <span className="text-[10px] text-slate-400">Échéance dépassée</span>
@@ -130,12 +203,16 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
         </div>
       </div>
 
-      {/* Burndown Chart Interactif */}
+      {/* Burndown Chart Dynamique */}
       <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm text-white">Burndown Chart (Travail Restant vs Idéal)</h3>
-            <p className="text-xs text-slate-400">Trajectoire de l&apos;équipe pour la validation finale</p>
+            <h3 className="font-bold text-sm text-white">
+              Burndown Chart Dynamique (Travail Restant : {remainingTasks} tâche(s) sur {totalTasks})
+            </h3>
+            <p className="text-xs text-slate-400">
+              Mis à jour en temps réel selon les cartes déplacées dans « {doneCol?.name || 'Terminé'} »
+            </p>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5 text-slate-400">
@@ -144,53 +221,66 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
             </div>
             <div className="flex items-center gap-1.5 text-indigo-400 font-semibold">
               <span className="w-3 h-1 bg-indigo-500 rounded" />
-              <span>Réel</span>
+              <span>Réel ({remainingTasks} restantes)</span>
             </div>
           </div>
         </div>
 
-        {/* SVG Graphique Burndown */}
         <div className="h-44 w-full pt-2">
           <svg className="w-full h-full" viewBox="0 0 500 150">
-            {/* Lignes de repères */}
             <line x1="40" y1="20" x2="480" y2="20" stroke="#334155" strokeDasharray="3,3" />
             <line x1="40" y1="70" x2="480" y2="70" stroke="#334155" strokeDasharray="3,3" />
             <line x1="40" y1="120" x2="480" y2="120" stroke="#334155" />
 
-            {/* Trajectoire Idéale (Gris pointillés) */}
-            <line x1="50" y1="20" x2="470" y2="120" stroke="#64748b" strokeWidth="2" strokeDasharray="4,4" />
+            {/* Trajectoire Idéale */}
+            <line
+              x1="50"
+              y1="20"
+              x2="470"
+              y2="120"
+              stroke="#64748b"
+              strokeWidth="2"
+              strokeDasharray="4,4"
+            />
 
-            {/* Trajectoire Réelle (Indigo éclatant) */}
+            {/* Trajectoire Réelle calculée dynamiquement */}
             <polyline
               fill="none"
               stroke="#6366f1"
               strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              points="50,20 120,25 190,40 260,55 330,60 400,65 470,75"
+              points={polylinePoints}
             />
 
-            {/* Points réels */}
-            <circle cx="50" cy="20" r="4" fill="#818cf8" />
-            <circle cx="120" cy="25" r="4" fill="#818cf8" />
-            <circle cx="190" cy="40" r="4" fill="#818cf8" />
-            <circle cx="260" cy="55" r="4" fill="#818cf8" />
-            <circle cx="330" cy="60" r="4" fill="#818cf8" />
-            <circle cx="400" cy="65" r="4" fill="#818cf8" />
-            <circle cx="470" cy="75" r="5" fill="#a5b4fc" />
+            {dynamicSeries.map((pt, i) => (
+              <circle
+                key={i}
+                cx={pt.x}
+                cy={pt.y}
+                r={i === dynamicSeries.length - 1 ? 5 : 4}
+                fill={i === dynamicSeries.length - 1 ? '#a5b4fc' : '#818cf8'}
+              />
+            ))}
 
-            {/* Libellés X */}
-            <text x="45" y="140" fill="#94a3b8" fontSize="10">J-6</text>
-            <text x="185" y="140" fill="#94a3b8" fontSize="10">J-4</text>
-            <text x="325" y="140" fill="#94a3b8" fontSize="10">J-2</text>
-            <text x="440" y="140" fill="#cbd5e1" fontSize="10" fontWeight="bold">Aujourd&apos;hui</text>
+            <text x="45" y="140" fill="#94a3b8" fontSize="10">
+              J-6 ({totalTasks})
+            </text>
+            <text x="185" y="140" fill="#94a3b8" fontSize="10">
+              J-4
+            </text>
+            <text x="325" y="140" fill="#94a3b8" fontSize="10">
+              J-2
+            </text>
+            <text x="415" y="140" fill="#cbd5e1" fontSize="10" fontWeight="bold">
+              Aujourd&apos;hui ({remainingTasks})
+            </text>
           </svg>
         </div>
       </div>
 
       {/* Charge par membre & Journal d'activité */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Charge par membre */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-indigo-400" />
@@ -202,7 +292,11 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
               <div key={user.id} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <img src={user.avatar} alt={user.name} className="w-5 h-5 rounded-full object-cover" />
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
                     <span className="font-medium text-slate-200">{user.name}</span>
                   </div>
                   <span className="text-slate-400">
@@ -220,27 +314,41 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
           </div>
         </div>
 
-        {/* Journal d'activité récente (M7 cahier des charges) */}
         <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-emerald-400" />
-            <h3 className="font-bold text-sm text-white">Journal d&apos;activité récente (« Qui a fait quoi »)</h3>
+            <h3 className="font-bold text-sm text-white">
+              Journal d&apos;activité récente (« Qui a fait quoi »)
+            </h3>
           </div>
 
           <div className="space-y-2.5 max-h-56 overflow-y-auto">
             {activities.map((act) => {
               const u = users.find((x) => x.id === act.userId);
               return (
-                <div key={act.id} className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-800 text-xs flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <img src={u?.avatar} alt={u?.name} className="w-5 h-5 rounded-full object-cover" />
-                    <span className="text-slate-300">
-                      <strong className="text-slate-100">{u?.name}</strong> a validé{' '}
-                      <span className="text-indigo-300 font-medium">« {act.payload.taskTitle} »</span>
+                <div
+                  key={act.id}
+                  className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-800 text-xs flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <img
+                      src={
+                        u?.avatar ||
+                        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+                      }
+                      alt={u?.name}
+                      className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+                    />
+                    <span className="text-slate-300 truncate">
+                      <strong className="text-slate-100">{u?.name || 'Membre'}</strong>{' '}
+                      {renderActivityDescription(act)}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-500">
-                    {new Date(act.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  <span className="text-[10px] text-slate-500 flex-shrink-0">
+                    {new Date(act.createdAt).toLocaleTimeString('fr-FR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </span>
                 </div>
               );
@@ -249,20 +357,34 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
         </div>
       </div>
 
-      {/* Génération de Rapport de Projet pour l'enseignant */}
+      {/* Génération & Gestion des Rapports de Projet */}
       <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="font-bold text-sm text-white flex items-center gap-2">
               <FileCheck className="w-4 h-4 text-indigo-400" />
-              Rapport d&apos;Avancement Officiel (Validation Étudiante)
+              Rapports d&apos;Avancement du Projet ({reports.length})
             </h3>
             <p className="text-xs text-slate-400">
-              Généré automatiquement pour Mme Dupont et l&apos;équipe pédagogique
+              Synthèses générées à partir des métriques temps réel de « {project.name} »
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {reports.length > 1 && (
+              <select
+                value={selectedReport?.id || ''}
+                onChange={(e) => setSelectedReportId(e.target.value)}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200"
+              >
+                {reports.map((rep, idx) => (
+                  <option key={rep.id} value={rep.id}>
+                    #{reports.length - idx} — {rep.title} ({rep.completionRate}%)
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
               onClick={onGenerateReport}
               className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all"
@@ -282,10 +404,26 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
         {selectedReport && (
           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="font-bold text-xs text-indigo-300">{selectedReport.title}</span>
-              <span className="text-[11px] text-slate-500">
-                Généré le {new Date(selectedReport.generatedAt).toLocaleDateString('fr-FR')}
-              </span>
+              <div>
+                <span className="font-bold text-xs text-indigo-300">{selectedReport.title}</span>
+                <span className="ml-2 text-[11px] text-slate-500">
+                  • Généré le{' '}
+                  {new Date(selectedReport.generatedAt).toLocaleString('fr-FR', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                  })}
+                </span>
+              </div>
+
+              {onDeleteReport && (
+                <button
+                  onClick={() => onDeleteReport(selectedReport.id)}
+                  className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
+                  title="Supprimer ce rapport"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">{selectedReport.summary}</p>

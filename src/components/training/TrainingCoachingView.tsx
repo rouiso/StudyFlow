@@ -1,25 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   GraduationCap,
   Users,
-  Calendar,
   CheckCircle2,
   Clock,
   Video,
   MapPin,
   Lock,
   Unlock,
-  Star,
   Award,
   Target,
   Plus,
-  AlertCircle,
   FileText,
   UserCheck,
-  ChevronRight,
   ExternalLink,
+  Trash2,
+  Edit3,
+  Star,
+  X,
 } from 'lucide-react';
 import {
   Training,
@@ -43,6 +43,8 @@ interface TrainingCoachingViewProps {
   onEnrollTraining: (trainingId: string) => void;
   onUnenrollTraining: (trainingId: string) => void;
   onCreateTraining: (training: Omit<Training, 'id' | 'createdAt'>) => void;
+  onUpdateTraining?: (trainingId: string, updates: Partial<Omit<Training, 'id'>>) => void;
+  onDeleteTraining?: (trainingId: string) => void;
   onToggleAttendance: (enrollmentId: string) => void;
   onRequestCoaching: (session: {
     coachId: string;
@@ -53,10 +55,20 @@ interface TrainingCoachingViewProps {
   }) => void;
   onConfirmCoaching: (sessionId: string, slot: string) => void;
   onCompleteCoaching: (sessionId: string, sharedReport: string, privateNotes?: string) => void;
+  onDeleteCoaching?: (sessionId: string) => void;
   onUpdateGoalProgress: (goalId: string, progress: number) => void;
   onCreateGoal: (goal: Omit<CoachingGoal, 'id' | 'createdAt'>) => void;
-  onAssessSkill: (userId: string, skill: string, level: number) => void;
+  onDeleteGoal?: (goalId: string) => void;
+  onAssessSkill: (userId: string, skill: string, level: number, selfAssessed?: boolean) => void;
 }
+
+const DEFAULT_SKILLS = [
+  'Next.js 15',
+  'Prisma & BDD',
+  'PWA & Mobile',
+  'Accessibilité & UI',
+  'Gestion Agile',
+];
 
 export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   trainings,
@@ -69,23 +81,29 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   onEnrollTraining,
   onUnenrollTraining,
   onCreateTraining,
+  onUpdateTraining,
+  onDeleteTraining,
   onToggleAttendance,
   onRequestCoaching,
   onConfirmCoaching,
   onCompleteCoaching,
+  onDeleteCoaching,
   onUpdateGoalProgress,
   onCreateGoal,
+  onDeleteGoal,
   onAssessSkill,
 }) => {
   const [subTab, setSubTab] = useState<'trainings' | 'coaching' | 'goals'>('trainings');
 
   // Modales
   const [showNewTrainingModal, setShowNewTrainingModal] = useState(false);
+  const [editingTraining, setEditingTraining] = useState<Training | null>(null);
   const [showRequestCoachingModal, setShowRequestCoachingModal] = useState(false);
   const [showNewGoalModal, setShowNewGoalModal] = useState(false);
-  const [selectedSessionForReport, setSelectedSessionForReport] = useState<CoachingSession | null>(null);
+  const [selectedSessionForReport, setSelectedSessionForReport] =
+    useState<CoachingSession | null>(null);
 
-  // État formulaire nouvelle formation
+  // État formulaire formation
   const [newTrainingTitle, setNewTrainingTitle] = useState('');
   const [newTrainingDesc, setNewTrainingDesc] = useState('');
   const [newTrainingSkill, setNewTrainingSkill] = useState('Next.js 15');
@@ -93,15 +111,13 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   const [newTrainingCapacity, setNewTrainingCapacity] = useState(8);
   const [newTrainingMode, setNewTrainingMode] = useState<TrainingMode>('ONLINE');
   const [newTrainingStartsAt, setNewTrainingStartsAt] = useState('2026-11-20T14:00');
-  const [newTrainingLocation, setNewTrainingLocation] = useState('');
 
   // État formulaire demande coaching
   const [coachingTopic, setCoachingTopic] = useState('');
   const [selectedCoachId, setSelectedCoachId] = useState(
-    users.find((u) => u.role === 'COACH')?.id || users[0]?.id || ''
+    users.find((u) => u.role === 'COACH' || u.role === 'ADMIN')?.id || users[0]?.id || ''
   );
   const [slot1, setSlot1] = useState('2026-11-18T10:00');
-  const [slot2, setSlot2] = useState('2026-11-18T14:00');
   const [coachingDuration, setCoachingDuration] = useState(45);
   const [coachingMode, setCoachingMode] = useState<TrainingMode>('ONLINE');
 
@@ -114,7 +130,44 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   const [newGoalSkill, setNewGoalSkill] = useState('Next.js 15');
   const [newGoalDate, setNewGoalDate] = useState('2026-12-01');
 
-  const isCoachOrAdmin = currentUser.role === 'COACH' || currentUser.role === 'ADMIN' || currentUser.role === 'OWNER';
+  // État nouvelle compétence
+  const [customSkillInput, setCustomSkillInput] = useState('');
+
+  const isCoachOrAdmin =
+    currentUser.role === 'COACH' ||
+    currentUser.role === 'ADMIN' ||
+    currentUser.role === 'OWNER';
+
+  const allSkills = useMemo(() => {
+    const set = new Set<string>(DEFAULT_SKILLS);
+    skillLevels.forEach((s) => set.add(s.skill));
+    coachingGoals.forEach((g) => set.add(g.skill));
+    return Array.from(set);
+  }, [skillLevels, coachingGoals]);
+
+  const openCreateTraining = () => {
+    setEditingTraining(null);
+    setNewTrainingTitle('');
+    setNewTrainingDesc('');
+    setNewTrainingSkill('Next.js 15');
+    setNewTrainingLevel('INTERMEDIATE');
+    setNewTrainingCapacity(8);
+    setNewTrainingMode('ONLINE');
+    setNewTrainingStartsAt('2026-11-20T14:00');
+    setShowNewTrainingModal(true);
+  };
+
+  const openEditTraining = (t: Training) => {
+    setEditingTraining(t);
+    setNewTrainingTitle(t.title);
+    setNewTrainingDesc(t.description);
+    setNewTrainingSkill(t.skill);
+    setNewTrainingLevel(t.level);
+    setNewTrainingCapacity(t.capacity);
+    setNewTrainingMode(t.mode);
+    setNewTrainingStartsAt(t.startsAt ? t.startsAt.slice(0, 16) : '2026-11-20T14:00');
+    setShowNewTrainingModal(true);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -131,7 +184,8 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Développez vos compétences, planifiez vos séances de coaching et suivez votre progression.
+            Développez vos compétences, planifiez vos séances de coaching et suivez votre
+            progression.
           </p>
         </div>
 
@@ -146,7 +200,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             }`}
           >
             <GraduationCap className="w-3.5 h-3.5" />
-            <span>Formations</span>
+            <span>Formations ({trainings.length})</span>
           </button>
           <button
             onClick={() => setSubTab('coaching')}
@@ -157,7 +211,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Coaching</span>
+            <span>Coaching ({coachingSessions.length})</span>
           </button>
           <button
             onClick={() => setSubTab('goals')}
@@ -168,7 +222,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             }`}
           >
             <Target className="w-3.5 h-3.5" />
-            <span>Compétences</span>
+            <span>Objectifs & Compétences</span>
           </button>
         </div>
       </div>
@@ -184,7 +238,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             </h3>
             {isCoachOrAdmin && (
               <button
-                onClick={() => setShowNewTrainingModal(true)}
+                onClick={openCreateTraining}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -196,7 +250,9 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {trainings.map((t) => {
               const trainer = users.find((u) => u.id === t.trainerId);
-              const trainingEnrollments = enrollments.filter((e) => e.trainingId === t.id && e.status === 'ENROLLED');
+              const trainingEnrollments = enrollments.filter(
+                (e) => e.trainingId === t.id && e.status === 'ENROLLED'
+              );
               const isEnrolled = trainingEnrollments.some((e) => e.userId === currentUser.id);
               const isFull = trainingEnrollments.length >= t.capacity;
               const dateStr = new Date(t.startsAt).toLocaleDateString('fr-FR', {
@@ -213,7 +269,6 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   className="rounded-2xl glass-panel bg-slate-900/80 border border-slate-800 p-4 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-all shadow-lg"
                 >
                   <div className="space-y-2.5">
-                    {/* Badges niveau & mode */}
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
@@ -224,10 +279,14 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                             : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                         }`}
                       >
-                        {t.level === 'BEGINNER' ? 'Débutant' : t.level === 'INTERMEDIATE' ? 'Intermédiaire' : 'Avancé'}
+                        {t.level === 'BEGINNER'
+                          ? 'Débutant'
+                          : t.level === 'INTERMEDIATE'
+                          ? 'Intermédiaire'
+                          : 'Avancé'}
                       </span>
 
-                      <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                         {t.mode === 'ONLINE' ? (
                           <div className="flex items-center gap-1 text-sky-400">
                             <Video className="w-3 h-3" />
@@ -239,19 +298,42 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                             <span>Présentiel</span>
                           </div>
                         )}
+
+                        {isCoachOrAdmin && (
+                          <div className="flex items-center gap-1 ml-1">
+                            {onUpdateTraining && (
+                              <button
+                                onClick={() => openEditTraining(t)}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-400"
+                                title="Modifier cette formation"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            )}
+                            {onDeleteTraining && (
+                              <button
+                                onClick={() => onDeleteTraining(t.id)}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-rose-400"
+                                title="Supprimer cette formation"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <h4 className="font-bold text-sm text-white leading-snug">{t.title}</h4>
-                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{t.description}</p>
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {t.description}
+                    </p>
 
-                    {/* Compétence visée */}
                     <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-medium">
                       <Award className="w-3.5 h-3.5 text-indigo-400" />
                       <span>{t.skill}</span>
                     </div>
 
-                    {/* Date et Formateur */}
                     <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs">
                       <div className="flex items-center gap-2 text-slate-300">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -265,7 +347,10 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                             className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-700"
                           />
                           <span className="text-slate-400 text-[11px]">
-                            Animé par <strong className="text-slate-300 font-semibold">{trainer.name}</strong>
+                            Animé par{' '}
+                            <strong className="text-slate-300 font-semibold">
+                              {trainer.name}
+                            </strong>
                           </span>
                         </div>
                       )}
@@ -275,19 +360,69 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                     <div className="space-y-1 pt-1">
                       <div className="flex justify-between text-[11px]">
                         <span className="text-slate-400">Capacité :</span>
-                        <span className={`font-semibold ${isFull ? 'text-rose-400' : 'text-emerald-400'}`}>
-                          {trainingEnrollments.length} / {t.capacity} places {isFull && '(Complet)'}
+                        <span
+                          className={`font-semibold ${
+                            isFull ? 'text-rose-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          {trainingEnrollments.length} / {t.capacity} places{' '}
+                          {isFull && '(Complet)'}
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
-                            isFull ? 'bg-rose-500' : 'bg-gradient-to-r from-indigo-500 to-emerald-500'
+                            isFull
+                              ? 'bg-rose-500'
+                              : 'bg-gradient-to-r from-indigo-500 to-emerald-500'
                           }`}
-                          style={{ width: `${Math.min(100, (trainingEnrollments.length / t.capacity) * 100)}%` }}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              (trainingEnrollments.length / t.capacity) * 100
+                            )}%`,
+                          }}
                         />
                       </div>
                     </div>
+
+                    {/* Liste des inscrits et émargement présence */}
+                    {trainingEnrollments.length > 0 && (
+                      <div className="pt-2 border-t border-slate-800/70 space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                          Inscrits & Émargement :
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {trainingEnrollments.map((enr) => {
+                            const student = users.find((u) => u.id === enr.userId);
+                            return (
+                              <button
+                                key={enr.id}
+                                type="button"
+                                onClick={() => {
+                                  if (isCoachOrAdmin) onToggleAttendance(enr.id);
+                                }}
+                                title={
+                                  isCoachOrAdmin
+                                    ? 'Cliquer pour valider/annuler la présence'
+                                    : enr.attended
+                                    ? 'Présence validée'
+                                    : 'Inscrit'
+                                }
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 border transition-colors ${
+                                  enr.attended
+                                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                    : 'bg-slate-800 border-slate-700 text-slate-300'
+                                }`}
+                              >
+                                <span>{student?.name.split(' ')[0] || 'Étudiant'}</span>
+                                {enr.attended && <CheckCircle2 className="w-2.5 h-2.5" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Boutons d'action */}
@@ -298,7 +433,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                         className="w-full py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Inscrit (Annuler)</span>
+                        <span>Inscrit (Se désinscrire)</span>
                       </button>
                     ) : isFull ? (
                       <button
@@ -352,8 +487,12 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             {coachingSessions.map((s) => {
               const coach = users.find((u) => u.id === s.coachId);
               const coachee = users.find((u) => u.id === s.coacheeId);
-              const isCoachAuthor = currentUser.id === s.coachId || currentUser.role === 'COACH';
-              const isParticipant = currentUser.id === s.coacheeId || isCoachAuthor;
+              const isCoachAuthor =
+                currentUser.id === s.coachId ||
+                currentUser.role === 'COACH' ||
+                currentUser.role === 'OWNER' ||
+                currentUser.role === 'ADMIN';
+              const canDeleteSession = isCoachAuthor || currentUser.id === s.coacheeId;
 
               const statusColors: Record<string, string> = {
                 REQUESTED: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -393,8 +532,22 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                       {s.scheduledAt && (
                         <div className="flex items-center gap-1 text-slate-300">
                           <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>{new Date(s.scheduledAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          <span>
+                            {new Date(s.scheduledAt).toLocaleString('fr-FR', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </span>
                         </div>
+                      )}
+                      {canDeleteSession && onDeleteCoaching && (
+                        <button
+                          onClick={() => onDeleteCoaching(s.id)}
+                          className="p-1 rounded hover:bg-rose-500/10 text-slate-500 hover:text-rose-400"
+                          title="Supprimer cette séance de coaching"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -403,14 +556,32 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">Étudiant coaché :</span>
-                      <img src={coachee?.avatar} alt={coachee?.name} className="w-5 h-5 rounded-full object-cover" />
-                      <span className="font-semibold text-slate-200">{coachee?.name}</span>
+                      <img
+                        src={
+                          coachee?.avatar ||
+                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+                        }
+                        alt={coachee?.name}
+                        className="w-5 h-5 rounded-full object-cover"
+                      />
+                      <span className="font-semibold text-slate-200">
+                        {coachee?.name || 'Étudiant'}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">Coach référent :</span>
-                      <img src={coach?.avatar} alt={coach?.name} className="w-5 h-5 rounded-full object-cover" />
-                      <span className="font-semibold text-indigo-300">{coach?.name}</span>
+                      <img
+                        src={
+                          coach?.avatar ||
+                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+                        }
+                        alt={coach?.name}
+                        className="w-5 h-5 rounded-full object-cover"
+                      />
+                      <span className="font-semibold text-indigo-300">
+                        {coach?.name || 'Coach'}
+                      </span>
                     </div>
                   </div>
 
@@ -444,40 +615,43 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                     </div>
                   )}
 
-                  {/* ======================================================== */}
                   {/* ZONE SÉCURISÉE : NOTES PRIVÉES DU COACH (RÈGLE CDC v1.1) */}
-                  {/* ======================================================== */}
                   {s.privateNotes && (
                     <div
                       className={`p-3 rounded-xl border text-xs space-y-1 ${
-                        isCoachAuthor
+                        currentUser.id === s.coachId || currentUser.role === 'COACH'
                           ? 'bg-amber-950/20 border-amber-500/30 text-amber-200'
                           : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 font-bold">
-                          {isCoachAuthor ? (
+                          {currentUser.id === s.coachId || currentUser.role === 'COACH' ? (
                             <>
                               <Unlock className="w-3.5 h-3.5 text-amber-400" />
-                              <span className="text-amber-300">Notes privées du Coach (Strictement confidentiel) :</span>
+                              <span className="text-amber-300">
+                                Notes privées du Coach (Strictement confidentiel) :
+                              </span>
                             </>
                           ) : (
                             <>
                               <Lock className="w-3.5 h-3.5 text-slate-500" />
-                              <span>Notes privées protégées (Accès réservé au Coach auteur)</span>
+                              <span>
+                                Notes privées protégées (Accès réservé au Coach auteur)
+                              </span>
                             </>
                           )}
                         </div>
                       </div>
 
-                      {isCoachAuthor ? (
+                      {currentUser.id === s.coachId || currentUser.role === 'COACH' ? (
                         <p className="text-amber-200/90 leading-relaxed pl-5 italic font-mono text-[11px]">
                           {s.privateNotes}
                         </p>
                       ) : (
                         <p className="text-[11px] text-slate-500 pl-5">
-                          Conformément au §4.2 du Cahier des Charges, les observations privées ne sont visibles que par le formateur.
+                          Conformément au §4.2 du Cahier des Charges, les observations privées ne
+                          sont visibles que par le formateur.
                         </p>
                       )}
                     </div>
@@ -487,7 +661,12 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   {isCoachAuthor && s.status === 'REQUESTED' && (
                     <div className="pt-2 border-t border-slate-800 flex items-center gap-2 justify-end">
                       <button
-                        onClick={() => onConfirmCoaching(s.id, s.proposedSlots[0] || '2026-11-18T10:00:00Z')}
+                        onClick={() =>
+                          onConfirmCoaching(
+                            s.id,
+                            s.proposedSlots[0] || '2026-11-18T10:00:00Z'
+                          )
+                        }
                         className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -496,7 +675,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                     </div>
                   )}
 
-                  {isCoachAuthor && s.status === 'CONFIRMED' && (
+                  {isCoachAuthor && (s.status === 'CONFIRMED' || s.status === 'DONE') && (
                     <div className="pt-2 border-t border-slate-800 flex items-center gap-2 justify-end">
                       <button
                         onClick={() => {
@@ -507,7 +686,11 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                         className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>Rédiger compte-rendu & Clôturer</span>
+                        <span>
+                          {s.status === 'DONE'
+                            ? 'Modifier le compte-rendu'
+                            : 'Rédiger compte-rendu & Clôturer'}
+                        </span>
                       </button>
                     </div>
                   )}
@@ -528,16 +711,18 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Objectifs de progression
+                  Objectifs de progression ({coachingGoals.length})
                 </h3>
-                <p className="text-[11px] text-slate-400">Suivi individuel convenu avec le coach.</p>
+                <p className="text-[11px] text-slate-400">
+                  Suivi individuel convenu avec le coach.
+                </p>
               </div>
 
               <button
                 onClick={() => setShowNewGoalModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md"
               >
-                <Plus className="w-3 h-3 text-indigo-400" />
+                <Plus className="w-3.5 h-3.5" />
                 <span>Fixer un objectif</span>
               </button>
             </div>
@@ -553,18 +738,36 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
                         {g.skill}
                       </span>
-                      <h4 className="font-semibold text-xs sm:text-sm text-slate-200 mt-1.5">{g.title}</h4>
+                      <h4 className="font-semibold text-xs sm:text-sm text-slate-200 mt-1.5">
+                        {g.title}
+                      </h4>
+                      {g.targetDate && (
+                        <span className="text-[10px] text-slate-500">
+                          Échéance : {new Date(g.targetDate).toLocaleDateString('fr-FR')}
+                        </span>
+                      )}
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        g.status === 'ACHIEVED'
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
-                      }`}
-                    >
-                      {g.status === 'ACHIEVED' ? 'Atteint' : `${g.progress}%`}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          g.status === 'ACHIEVED'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
+                        }`}
+                      >
+                        {g.status === 'ACHIEVED' ? 'Atteint ✓' : `${g.progress}%`}
+                      </span>
+                      {onDeleteGoal && (
+                        <button
+                          onClick={() => onDeleteGoal(g.id)}
+                          className="p-1 text-slate-500 hover:text-rose-400"
+                          title="Supprimer cet objectif"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Barre de progression */}
@@ -595,44 +798,131 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             </div>
           </div>
 
-          {/* Cartographie des compétences (Auto-évalué vs Évalué par le Coach) */}
+          {/* Cartographie des compétences Interactive (Auto-évalué vs Évalué par le Coach) */}
           <div className="space-y-4">
-            <div>
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Cartographie des compétences (0 à 5)
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Comparaison entre la note auto-évaluée et l&apos;évaluation portée par le Coach (§7.1).
-              </p>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Cartographie des compétences (1 à 5)
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Cliquez sur les étoiles pour évaluer (Auto-évaluation & Évaluation Coach §7.1).
+                </p>
+              </div>
+            </div>
+
+            {/* Ajout d'une nouvelle compétence à évaluer */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={customSkillInput}
+                onChange={(e) => setCustomSkillInput(e.target.value)}
+                placeholder="Ajouter une compétence (ex: Docker, GraphQL...)"
+                className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = customSkillInput.trim();
+                  if (!trimmed) return;
+                  onAssessSkill(currentUser.id, trimmed, 3, true);
+                  setCustomSkillInput('');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 transition-colors"
+              >
+                + Ajouter
+              </button>
             </div>
 
             <div className="rounded-2xl glass-panel bg-slate-900/80 border border-slate-800 p-4 space-y-4">
-              {['Next.js 15', 'Prisma & BDD', 'PWA & Mobile', 'Accessibilité & UI', 'Gestion Agile'].map((skill) => {
-                const auto = skillLevels.find((s) => s.skill === skill && s.selfAssessed)?.level || 3;
-                const coachAssessment = skillLevels.find((s) => s.skill === skill && !s.selfAssessed)?.level || 4;
+              {allSkills.map((skill) => {
+                const autoEntry = skillLevels.find(
+                  (s) => s.skill === skill && s.selfAssessed
+                );
+                const coachEntry = skillLevels.find(
+                  (s) => s.skill === skill && !s.selfAssessed
+                );
+                const auto = autoEntry ? autoEntry.level : 3;
+                const coachAssessment = coachEntry ? coachEntry.level : 4;
 
                 return (
-                  <div key={skill} className="space-y-1.5 pb-3 border-b border-slate-800/80 last:border-0 last:pb-0">
-                    <div className="flex justify-between text-xs font-semibold text-slate-200">
+                  <div
+                    key={skill}
+                    className="space-y-2 pb-3 border-b border-slate-800/80 last:border-0 last:pb-0"
+                  >
+                    <div className="flex justify-between items-center text-xs font-semibold text-slate-200">
                       <span>{skill}</span>
                       <div className="flex items-center gap-3 text-[11px]">
-                        <span className="text-slate-400">Auto : <strong className="text-sky-400">{auto}/5</strong></span>
-                        <span className="text-slate-400">Coach : <strong className="text-purple-400">{coachAssessment}/5</strong></span>
+                        <span className="text-slate-400">
+                          Auto : <strong className="text-sky-400">{auto}/5</strong>
+                        </span>
+                        <span className="text-slate-400">
+                          Coach :{' '}
+                          <strong className="text-purple-400">{coachAssessment}/5</strong>
+                        </span>
                       </div>
                     </div>
 
-                    {/* Barres comparatives */}
-                    <div className="space-y-1">
+                    {/* Barres & étoiles interactives */}
+                    <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500 w-12">Auto :</span>
+                        <span className="text-[10px] text-slate-400 w-14">Auto :</span>
                         <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-sky-500 rounded-full" style={{ width: `${(auto / 5) * 100}%` }} />
+                          <div
+                            className="h-full bg-sky-500 rounded-full transition-all"
+                            style={{ width: `${(auto / 5) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((lvl) => (
+                            <button
+                              key={lvl}
+                              type="button"
+                              onClick={() =>
+                                onAssessSkill(currentUser.id, skill, lvl, true)
+                              }
+                              title={`Auto-évaluer ${skill} à ${lvl}/5`}
+                              className={`p-0.5 transition-colors ${
+                                lvl <= auto ? 'text-sky-400' : 'text-slate-700 hover:text-sky-300'
+                              }`}
+                            >
+                              <Star className="w-3 h-3 fill-current" />
+                            </button>
+                          ))}
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500 w-12">Coach :</span>
+                        <span className="text-[10px] text-slate-400 w-14">Coach :</span>
                         <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-purple-500 rounded-full" style={{ width: `${(coachAssessment / 5) * 100}%` }} />
+                          <div
+                            className="h-full bg-purple-500 rounded-full transition-all"
+                            style={{ width: `${(coachAssessment / 5) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((lvl) => (
+                            <button
+                              key={lvl}
+                              type="button"
+                              disabled={!isCoachOrAdmin}
+                              onClick={() =>
+                                onAssessSkill(currentUser.id, skill, lvl, false)
+                              }
+                              title={
+                                isCoachOrAdmin
+                                  ? `Évaluation Coach ${skill} : ${lvl}/5`
+                                  : 'Réservé au Coach / Admin'
+                              }
+                              className={`p-0.5 transition-colors ${
+                                lvl <= coachAssessment
+                                  ? 'text-purple-400'
+                                  : 'text-slate-700 hover:text-purple-300'
+                              } ${!isCoachOrAdmin ? 'cursor-not-allowed opacity-70' : ''}`}
+                            >
+                              <Star className="w-3 h-3 fill-current" />
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -645,15 +935,27 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* MODALE : CRÉATION DE FORMATION (§8 7.1)                  */}
+      {/* MODALE : CRÉATION / ÉDITION DE FORMATION (§8 7.1)        */}
       {/* ======================================================== */}
       {showNewTrainingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
-            <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-400" />
-              <span>Proposer une Nouvelle Formation</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-400" />
+                <span>
+                  {editingTraining
+                    ? 'Modifier la Formation'
+                    : 'Proposer une Nouvelle Formation'}
+                </span>
+              </h3>
+              <button
+                onClick={() => setShowNewTrainingModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
             <div className="space-y-3 text-xs">
               <div>
@@ -663,6 +965,17 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   value={newTrainingTitle}
                   onChange={(e) => setNewTrainingTitle(e.target.value)}
                   placeholder="ex: Atelier Docker & CI/CD"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Compétence visée :</label>
+                <input
+                  type="text"
+                  value={newTrainingSkill}
+                  onChange={(e) => setNewTrainingSkill(e.target.value)}
+                  placeholder="ex: Next.js 15, Prisma & BDD..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
                 />
               </div>
@@ -698,7 +1011,9 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                     min="1"
                     max="30"
                     value={newTrainingCapacity}
-                    onChange={(e) => setNewTrainingCapacity(parseInt(e.target.value, 10))}
+                    onChange={(e) =>
+                      setNewTrainingCapacity(parseInt(e.target.value, 10) || 1)
+                    }
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
                   />
                 </div>
@@ -725,25 +1040,130 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
               <button
                 onClick={() => {
                   if (!newTrainingTitle.trim()) return;
-                  onCreateTraining({
-                    teamId: 'team-1',
-                    title: newTrainingTitle.trim(),
-                    description: newTrainingDesc.trim(),
-                    skill: newTrainingSkill,
-                    level: newTrainingLevel,
-                    trainerId: currentUser.id,
-                    startsAt: new Date(newTrainingStartsAt).toISOString(),
-                    endsAt: new Date(new Date(newTrainingStartsAt).getTime() + 7200000).toISOString(),
-                    capacity: newTrainingCapacity,
-                    mode: newTrainingMode,
-                    meetingUrl: 'https://meet.jit.si/studyflow-session',
-                    status: 'PUBLISHED',
-                  });
+                  if (editingTraining && onUpdateTraining) {
+                    onUpdateTraining(editingTraining.id, {
+                      title: newTrainingTitle.trim(),
+                      description: newTrainingDesc.trim(),
+                      skill: newTrainingSkill.trim() || 'Next.js 15',
+                      level: newTrainingLevel,
+                      capacity: newTrainingCapacity,
+                      mode: newTrainingMode,
+                      startsAt: new Date(newTrainingStartsAt).toISOString(),
+                    });
+                  } else {
+                    onCreateTraining({
+                      teamId: 'team-1',
+                      title: newTrainingTitle.trim(),
+                      description: newTrainingDesc.trim(),
+                      skill: newTrainingSkill.trim() || 'Next.js 15',
+                      level: newTrainingLevel,
+                      trainerId: currentUser.id,
+                      startsAt: new Date(newTrainingStartsAt).toISOString(),
+                      endsAt: new Date(
+                        new Date(newTrainingStartsAt).getTime() + 7200000
+                      ).toISOString(),
+                      capacity: newTrainingCapacity,
+                      mode: newTrainingMode,
+                      meetingUrl: 'https://meet.jit.si/studyflow-session',
+                      status: 'PUBLISHED',
+                    });
+                  }
                   setShowNewTrainingModal(false);
                 }}
                 className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
               >
-                Publier la formation
+                {editingTraining ? 'Enregistrer' : 'Publier la formation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODALE : NOUVEL OBJECTIF DE PROGRESSION (§8 7.6)         */}
+      {/* ======================================================== */}
+      {showNewGoalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Target className="w-5 h-5 text-indigo-400" />
+                <span>Fixer un Nouvel Objectif de Progression</span>
+              </h3>
+              <button
+                onClick={() => setShowNewGoalModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Intitulé de l&apos;objectif *</label>
+                <input
+                  type="text"
+                  value={newGoalTitle}
+                  onChange={(e) => setNewGoalTitle(e.target.value)}
+                  placeholder="Ex: Maîtriser les transactions Prisma et l'optimistic UI..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Compétence associée</label>
+                <select
+                  value={newGoalSkill}
+                  onChange={(e) => setNewGoalSkill(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                >
+                  {allSkills.map((sk) => (
+                    <option key={sk} value={sk}>
+                      {sk}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Date cible</label>
+                <input
+                  type="date"
+                  value={newGoalDate}
+                  onChange={(e) => setNewGoalDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end gap-2">
+              <button
+                onClick={() => setShowNewGoalModal(false)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (!newGoalTitle.trim()) return;
+                  onCreateGoal({
+                    userId: currentUser.id,
+                    teamId: 'team-1',
+                    coachId:
+                      users.find((u) => u.role === 'COACH')?.id || currentUser.id,
+                    title: newGoalTitle.trim(),
+                    skill: newGoalSkill,
+                    targetDate: newGoalDate,
+                    progress: 0,
+                    status: 'OPEN',
+                  });
+                  setNewGoalTitle('');
+                  setShowNewGoalModal(false);
+                }}
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+              >
+                Créer l&apos;objectif
               </button>
             </div>
           </div>
@@ -763,7 +1183,9 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Sujet / Problématique abordée :</label>
+                <label className="text-slate-400 block mb-1">
+                  Sujet / Problématique abordée :
+                </label>
                 <input
                   type="text"
                   value={coachingTopic}
@@ -774,14 +1196,19 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Sélectionner le Coach référent :</label>
+                <label className="text-slate-400 block mb-1">
+                  Sélectionner le Coach référent :
+                </label>
                 <select
                   value={selectedCoachId}
                   onChange={(e) => setSelectedCoachId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white"
                 >
                   {users
-                    .filter((u) => u.role === 'COACH' || u.role === 'ADMIN')
+                    .filter(
+                      (u) =>
+                        u.role === 'COACH' || u.role === 'ADMIN' || u.role === 'OWNER'
+                    )
                     .map((coach) => (
                       <option key={coach.id} value={coach.id}>
                         {coach.name} ({coach.role})
@@ -817,7 +1244,9 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Créneau proposé 1 (minimum 24h à l&apos;avance) :</label>
+                <label className="text-slate-400 block mb-1">
+                  Créneau proposé (minimum 24h à l&apos;avance) :
+                </label>
                 <input
                   type="datetime-local"
                   value={slot1}
@@ -844,6 +1273,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                     durationMin: coachingDuration,
                     mode: coachingMode,
                   });
+                  setCoachingTopic('');
                   setShowRequestCoachingModal(false);
                 }}
                 className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
@@ -886,7 +1316,8 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   <span>Notes privées du Coach (STRICTEMENT CONFIDENTIEL) :</span>
                 </label>
                 <p className="text-[10px] text-amber-400/80">
-                  Visible UNIQUEMENT par vous-même. Ne sera jamais transmis à l&apos;étudiant ni inclus dans les rapports.
+                  Visible UNIQUEMENT par vous-même. Ne sera jamais transmis à l&apos;étudiant ni
+                  inclus dans les rapports.
                 </p>
                 <textarea
                   rows={2}
@@ -907,7 +1338,11 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
               </button>
               <button
                 onClick={() => {
-                  onCompleteCoaching(selectedSessionForReport.id, reportShared, reportPrivate);
+                  onCompleteCoaching(
+                    selectedSessionForReport.id,
+                    reportShared,
+                    reportPrivate
+                  );
                   setSelectedSessionForReport(null);
                 }}
                 className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
@@ -921,4 +1356,3 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
     </div>
   );
 };
-

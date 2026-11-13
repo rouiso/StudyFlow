@@ -428,6 +428,57 @@ describe('User Management & RBAC Engine (Module 1)', () => {
     assert.strictEqual(getFileCategory('maquette.png', 'image/png'), 'image');
     assert.strictEqual(getFileCategory('audit.json', 'application/json'), 'code');
   });
+
+  it('Module 2 (Kanban) : réorganisation des colonnes (gauche/droite/drag) et suppression avec transfert des tâches', async () => {
+    const {
+      reorderProjectColumns,
+      deleteProjectColumn,
+    } = await import('../src/lib/kanban-columns');
+
+    const cols = [
+      { id: 'c1', projectId: 'proj-1', name: 'À faire', position: 1000, isDone: false },
+      { id: 'c2', projectId: 'proj-1', name: 'En cours', position: 2000, isDone: false },
+      { id: 'c3', projectId: 'proj-1', name: 'En revue', position: 3000, isDone: false },
+      { id: 'c4', projectId: 'proj-1', name: 'Terminé', position: 4000, isDone: true },
+    ];
+
+    const tasks = [
+      {
+        id: 't1',
+        projectId: 'proj-1',
+        columnId: 'c2',
+        title: 'Tâche en cours',
+        description: '',
+        position: 1,
+        priority: 'NORMALE' as const,
+        dueDate: '2026-11-10',
+        createdById: 'u-owner',
+        createdAt: '2026-10-20T10:00:00Z',
+        assigneeIds: ['u-owner'],
+        labelIds: [],
+      },
+    ];
+
+    // 1. Déplacer 'c3' (En revue) vers la gauche (avant 'c2')
+    const movedLeft = reorderProjectColumns(cols, 'proj-1', 'c3', 'c2');
+    const sortedIds = movedLeft
+      .filter((c) => c.projectId === 'proj-1')
+      .sort((a, b) => a.position - b.position)
+      .map((c) => c.id);
+    assert.deepStrictEqual(sortedIds, ['c1', 'c3', 'c2', 'c4']);
+
+    // 2. Supprimer 'c2' (qui contient t1) transfère automatiquement t1 vers la première colonne restante ('c1')
+    const delRes = deleteProjectColumn(movedLeft, tasks, 'proj-1', 'c2');
+    assert.strictEqual(delRes.ok, true);
+    assert.strictEqual(delRes.columns.length, 3);
+    assert.strictEqual(delRes.tasks.find((t) => t.id === 't1')?.columnId, 'c1');
+
+    // 3. Impossible de supprimer la toute dernière colonne d'un projet
+    const singleCol = [{ id: 'c1', projectId: 'proj-1', name: 'Unique', position: 1000, isDone: true }];
+    const blockedDel = deleteProjectColumn(singleCol, tasks, 'proj-1', 'c1');
+    assert.strictEqual(blockedDel.ok, false);
+  });
 });
+
 
 

@@ -38,6 +38,11 @@ import {
   ROLE_METADATA,
 } from '@/lib/user-management';
 import { appendOrVersionFile } from '@/lib/file-manager';
+import {
+  reorderProjectColumns,
+  moveColumnByDirection,
+  deleteProjectColumn,
+} from '@/lib/kanban-columns';
 import { Header } from '@/components/layout/Header';
 import { MobileBottomNav, ActiveTab } from '@/components/layout/MobileBottomNav';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -50,7 +55,8 @@ import { TaskModal } from '@/components/tasks/TaskModal';
 import { TeamInviteModal } from '@/components/teams/TeamInviteModal';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { TrainingCoachingView } from '@/components/training/TrainingCoachingView';
-import { Users, PlusCircle, Shield } from 'lucide-react';
+import { DatabaseInspectorModal } from '@/components/database/DatabaseInspectorModal';
+import { Users, PlusCircle, Shield, Database, Edit3 } from 'lucide-react';
 
 export default function StudyFlowHome() {
   const [data, setData] = useState<StudyFlowData>(initialData);
@@ -63,6 +69,8 @@ export default function StudyFlowHome() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<import('@/types').Project | null>(null);
+  const [isDbInspectorOpen, setIsDbInspectorOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalDefaultColId, setModalDefaultColId] = useState<string | undefined>();
 
@@ -276,7 +284,9 @@ export default function StudyFlowHome() {
     activeProjectsList[0] ||
     initialData.projects[0];
 
-  const currentColumns = data.columns.filter((c) => c.projectId === currentProject.id);
+  const currentColumns = data.columns
+    .filter((c) => c.projectId === currentProject.id)
+    .sort((a, b) => a.position - b.position);
   const currentTasks = data.tasks.filter((t) => t.projectId === currentProject.id);
   const currentMilestones = data.milestones.filter((m) => m.projectId === currentProject.id);
   const currentFiles = data.files.filter((f) => f.projectId === currentProject.id);
@@ -518,6 +528,20 @@ export default function StudyFlowHome() {
     }));
   };
 
+  const handleEditMessage = (messageId: string, content: string) => {
+    updateData((prev) => ({
+      ...prev,
+      messages: prev.messages.map((m) => (m.id === messageId ? { ...m, content } : m)),
+    }));
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      messages: prev.messages.filter((m) => m.id !== messageId),
+    }));
+  };
+
   const handleUploadFile = (
     fileData: Omit<FileItem, 'id' | 'createdAt'> & { targetFileId?: string; note?: string }
   ) => {
@@ -610,6 +634,18 @@ export default function StudyFlowHome() {
     }));
   };
 
+  const handleUpdateMilestone = (
+    milestoneId: string,
+    updates: Partial<Omit<Milestone, 'id'>>
+  ) => {
+    updateData((prev) => ({
+      ...prev,
+      milestones: prev.milestones.map((m) =>
+        m.id === milestoneId ? { ...m, ...updates } : m
+      ),
+    }));
+  };
+
   // RAPPORT PROJET
   const handleGenerateReport = () => {
     const doneCol = currentColumns.find((c) => c.isDone);
@@ -638,6 +674,13 @@ export default function StudyFlowHome() {
     updateData((prev) => ({
       ...prev,
       reports: [newReport, ...prev.reports],
+    }));
+  };
+
+  const handleDeleteReport = (reportId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      reports: prev.reports.filter((r) => r.id !== reportId),
     }));
   };
 
@@ -991,8 +1034,35 @@ export default function StudyFlowHome() {
     setCurrentProjectId(newProjId);
   };
 
+  const handleUpdateProject = (
+    projectId: string,
+    updates: Partial<Omit<import('@/types').Project, 'id'>>
+  ) => {
+    updateData((prev) => ({
+      ...prev,
+      projects: prev.projects.map((p) => (p.id === projectId ? { ...p, ...updates } : p)),
+    }));
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    if (activeProjectsList.length <= 1) {
+      alert('Impossible de supprimer le seul projet actif de cette équipe.');
+      return;
+    }
+    const remaining = activeProjectsList.filter((p) => p.id !== projectId);
+    updateData((prev) => ({
+      ...prev,
+      projects: prev.projects.filter((p) => p.id !== projectId),
+      columns: prev.columns.filter((c) => c.projectId !== projectId),
+      tasks: prev.tasks.filter((t) => t.projectId !== projectId),
+    }));
+    if (remaining[0]) {
+      setCurrentProjectId(remaining[0].id);
+    }
+  };
+
   const handleAddColumn = (name: string, wipLimit?: number) => {
-    if (!rolePerms.canManageColumns) return;
+    if (!rolePerms.canWriteTasks) return;
     const newCol: Column = {
       id: `col-${Date.now()}`,
       projectId: currentProject.id,
@@ -1005,6 +1075,64 @@ export default function StudyFlowHome() {
     updateData((prev) => ({
       ...prev,
       columns: [...prev.columns, newCol],
+    }));
+  };
+
+  const handleDeleteColumn = (columnId: string) => {
+    if (!rolePerms.canWriteTasks) return;
+    updateData((prev) => {
+      const res = deleteProjectColumn(prev.columns, prev.tasks, currentProject.id, columnId);
+      if (!res.ok) {
+        if (res.error) alert(res.error);
+        return prev;
+      }
+      return {
+        ...prev,
+        columns: res.columns,
+        tasks: res.tasks,
+      };
+    });
+  };
+
+  const handleMoveColumn = (columnId: string, direction: 'left' | 'right') => {
+    if (!rolePerms.canWriteTasks) return;
+    updateData((prev) => ({
+      ...prev,
+      columns: moveColumnByDirection(prev.columns, currentProject.id, columnId, direction),
+    }));
+  };
+
+  const handleReorderColumns = (sourceColumnId: string, targetColumnId: string) => {
+    if (!rolePerms.canWriteTasks) return;
+    updateData((prev) => ({
+      ...prev,
+      columns: reorderProjectColumns(
+        prev.columns,
+        currentProject.id,
+        sourceColumnId,
+        targetColumnId
+      ),
+    }));
+  };
+
+  const handleUpdateColumn = (
+    columnId: string,
+    updates: Partial<Pick<Column, 'name' | 'wipLimit' | 'color' | 'isDone'>>
+  ) => {
+    if (!rolePerms.canWriteTasks) return;
+    updateData((prev) => ({
+      ...prev,
+      columns: prev.columns.map((col) => {
+        if (col.projectId !== currentProject.id) return col;
+        if (col.id === columnId) {
+          return { ...col, ...updates };
+        }
+        // Si on marque cette colonne comme "Terminé" (isDone: true), désactiver isDone sur les autres colonnes du projet
+        if (updates.isDone === true) {
+          return { ...col, isDone: false };
+        }
+        return col;
+      }),
     }));
   };
 
@@ -1084,6 +1212,24 @@ export default function StudyFlowHome() {
     }));
   };
 
+  const handleUpdateTraining = (
+    trainingId: string,
+    updates: Partial<Omit<Training, 'id'>>
+  ) => {
+    updateData((prev) => ({
+      ...prev,
+      trainings: prev.trainings.map((t) => (t.id === trainingId ? { ...t, ...updates } : t)),
+    }));
+  };
+
+  const handleDeleteTraining = (trainingId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      trainings: prev.trainings.filter((t) => t.id !== trainingId),
+      enrollments: prev.enrollments.filter((e) => e.trainingId !== trainingId),
+    }));
+  };
+
   const handleToggleAttendance = (enrollmentId: string) => {
     updateData((prev) => ({
       ...prev,
@@ -1152,6 +1298,13 @@ export default function StudyFlowHome() {
     }));
   };
 
+  const handleDeleteCoaching = (sessionId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      coachingSessions: prev.coachingSessions.filter((s) => s.id !== sessionId),
+    }));
+  };
+
   const handleUpdateGoalProgress = (goalId: string, progress: number) => {
     updateData((prev) => ({
       ...prev,
@@ -1181,17 +1334,31 @@ export default function StudyFlowHome() {
     }));
   };
 
-  const handleAssessSkill = (userId: string, skill: string, level: number) => {
+  const handleDeleteGoal = (goalId: string) => {
+    updateData((prev) => ({
+      ...prev,
+      coachingGoals: prev.coachingGoals.filter((g) => g.id !== goalId),
+    }));
+  };
+
+  const handleAssessSkill = (
+    userId: string,
+    skill: string,
+    level: number,
+    selfAssessed = false
+  ) => {
     updateData((prev) => {
       const existing = prev.skillLevels.find(
-        (s) => s.userId === userId && s.skill === skill && !s.selfAssessed
+        (s) => s.skill === skill && Boolean(s.selfAssessed) === Boolean(selfAssessed)
       );
 
       if (existing) {
         return {
           ...prev,
           skillLevels: prev.skillLevels.map((s) =>
-            s.id === existing.id ? { ...s, level, updatedAt: new Date().toISOString().split('T')[0] } : s
+            s.id === existing.id
+              ? { ...s, level, updatedAt: new Date().toISOString().split('T')[0] }
+              : s
           ),
         };
       }
@@ -1202,8 +1369,8 @@ export default function StudyFlowHome() {
         teamId: currentTeam.id,
         skill,
         level,
-        selfAssessed: false,
-        assessedById: prev.currentUser.id,
+        selfAssessed,
+        assessedById: selfAssessed ? undefined : prev.currentUser.id,
         updatedAt: new Date().toISOString().split('T')[0],
       };
 
@@ -1248,7 +1415,10 @@ export default function StudyFlowHome() {
         onMarkNotificationRead={handleMarkNotificationRead}
         onResetData={handleResetData}
         onOpenTeamModal={() => setIsTeamModalOpen(true)}
-        onOpenProjectModal={() => setIsProjectModalOpen(true)}
+        onOpenProjectModal={() => {
+          setEditingProject(null);
+          setIsProjectModalOpen(true);
+        }}
       />
 
       {/* Barre de Session, Équipe Active & Moteur de Rôles (OWNER, ADMIN, COACH, MEMBER, VIEWER) */}
@@ -1284,7 +1454,32 @@ export default function StudyFlowHome() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {rolePerms.canCreateProject && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProject(currentProject);
+                  setIsProjectModalOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                title="Modifier ou supprimer le projet courant"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Modifier Projet</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsDbInspectorOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+              title="Inspecter les tables SQLite & Prisma (Soutenance)"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Base de Données (SQLite)</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setIsTeamModalOpen(true)}
@@ -1318,6 +1513,10 @@ export default function StudyFlowHome() {
             onOpenTaskModal={handleOpenTaskModal}
             onMoveTask={handleMoveTask}
             onAddColumn={handleAddColumn}
+            onDeleteColumn={handleDeleteColumn}
+            onMoveColumn={handleMoveColumn}
+            onReorderColumns={handleReorderColumns}
+            onUpdateColumn={handleUpdateColumn}
           />
         )}
 
@@ -1337,6 +1536,7 @@ export default function StudyFlowHome() {
 
         {activeTab === 'calendar' && (
           <CalendarView
+            projectId={currentProject.id}
             tasks={currentTasks}
             milestones={currentMilestones}
             columns={currentColumns}
@@ -1346,6 +1546,7 @@ export default function StudyFlowHome() {
             currentUserId={effectiveCurrentUser.id}
             onOpenTaskModal={(t) => handleOpenTaskModal(t)}
             onAddMilestone={handleAddMilestone}
+            onUpdateMilestone={handleUpdateMilestone}
             onToggleMilestone={handleToggleMilestone}
             onDeleteMilestone={handleDeleteMilestone}
           />
@@ -1361,6 +1562,8 @@ export default function StudyFlowHome() {
             folders={(data.folders || []).filter((f) => f.projectId === currentProject.id)}
             tasks={currentTasks}
             onSendMessage={handleSendMessage}
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
             onUploadFile={handleUploadFile}
             onDeleteFile={handleDeleteFile}
             onCreateFolder={handleCreateFolder}
@@ -1381,12 +1584,16 @@ export default function StudyFlowHome() {
             onEnrollTraining={handleEnrollTraining}
             onUnenrollTraining={handleUnenrollTraining}
             onCreateTraining={handleCreateTraining}
+            onUpdateTraining={handleUpdateTraining}
+            onDeleteTraining={handleDeleteTraining}
             onToggleAttendance={handleToggleAttendance}
             onRequestCoaching={handleRequestCoaching}
             onConfirmCoaching={handleConfirmCoaching}
             onCompleteCoaching={handleCompleteCoaching}
+            onDeleteCoaching={handleDeleteCoaching}
             onUpdateGoalProgress={handleUpdateGoalProgress}
             onCreateGoal={handleCreateGoal}
+            onDeleteGoal={handleDeleteGoal}
             onAssessSkill={handleAssessSkill}
           />
         )}
@@ -1400,6 +1607,7 @@ export default function StudyFlowHome() {
             activities={currentActivities}
             reports={data.reports.filter((r) => r.projectId === currentProject.id)}
             onGenerateReport={handleGenerateReport}
+            onDeleteReport={handleDeleteReport}
           />
         )}
 
@@ -1452,19 +1660,32 @@ export default function StudyFlowHome() {
         />
       )}
 
-      {/* Modale Nouveau Projet (Module 2) */}
+      {/* Modale Nouveau / Modifier Projet (Module 2) */}
       {isProjectModalOpen && (
         <ProjectModal
-          onClose={() => setIsProjectModalOpen(false)}
+          teamId={currentTeam.id}
+          initialProject={editingProject}
+          canDelete={rolePerms.canDeleteProject && activeProjectsList.length > 1}
+          onClose={() => {
+            setIsProjectModalOpen(false);
+            setEditingProject(null);
+          }}
           onCreateProject={handleCreateProject}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
         />
+      )}
+
+      {/* Inspecteur Base de Données SQLite & Prisma (Soutenance) */}
+      {isDbInspectorOpen && (
+        <DatabaseInspectorModal onClose={() => setIsDbInspectorOpen(false)} />
       )}
 
       {/* Barre de navigation inférieure Mobile-First */}
       <MobileBottomNav
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
-        unreadMessagesCount={1}
+        unreadMessagesCount={data.notifications.filter((n) => !n.readAt).length}
       />
     </div>
   );

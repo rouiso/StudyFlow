@@ -24,6 +24,8 @@ import {
   Share2,
   Sparkles,
   ArrowUpDown,
+  Edit3,
+  Check,
 } from 'lucide-react';
 import { Message, User, FileItem, FolderItem, Project, Task } from '@/types';
 import {
@@ -44,6 +46,8 @@ interface ProjectChatViewProps {
   folders?: FolderItem[];
   tasks?: Task[];
   onSendMessage: (content: string) => void;
+  onEditMessage?: (messageId: string, content: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   onUploadFile: (
     file: Omit<FileItem, 'id' | 'createdAt'> & { targetFileId?: string; note?: string }
   ) => void;
@@ -74,6 +78,8 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
   folders = [],
   tasks = [],
   onSendMessage,
+  onEditMessage,
+  onDeleteMessage,
   onUploadFile,
   onDeleteFile,
   onCreateFolder,
@@ -82,6 +88,8 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'chat' | 'files'>('chat');
   const [messageInput, setMessageInput] = useState('');
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingMsgContent, setEditingMsgContent] = useState('');
 
   // État Module 6 : Gestionnaire de Fichiers & Documents
   const [selectedFolderId, setSelectedFolderId] = useState<string>('ALL'); // 'ALL' | 'ROOT' | folder.id
@@ -475,11 +483,13 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
             {messages.map((msg) => {
               const author = users.find((u) => u.id === msg.authorId);
               const isMe = msg.authorId === currentUser.id;
+              const canManageMsg =
+                isMe || currentUser.role === 'OWNER' || currentUser.role === 'ADMIN';
 
               return (
                 <div
                   key={msg.id}
-                  className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}
+                  className={`flex items-start gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}
                 >
                   <img
                     src={
@@ -501,17 +511,75 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
                           minute: '2-digit',
                         })}
                       </span>
+                      {canManageMsg && editingMsgId !== msg.id && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isMe && onEditMessage && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMsgId(msg.id);
+                                setEditingMsgContent(msg.content);
+                              }}
+                              className="p-0.5 text-slate-500 hover:text-indigo-400"
+                              title="Modifier ce message"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          )}
+                          {onDeleteMessage && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteMessage(msg.id)}
+                              className="p-0.5 text-slate-500 hover:text-rose-400"
+                              title="Supprimer ce message"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <div
-                      className={`p-3 rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                        isMe
-                          ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20'
-                          : 'glass-card bg-slate-800/90 text-slate-200 rounded-tl-none border border-slate-700/60'
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
+                    {editingMsgId === msg.id ? (
+                      <div className="flex items-center gap-1.5 bg-slate-900 border border-indigo-500/50 rounded-xl p-1.5">
+                        <input
+                          type="text"
+                          value={editingMsgContent}
+                          onChange={(e) => setEditingMsgContent(e.target.value)}
+                          className="px-2 py-1 rounded bg-slate-800 text-xs text-white focus:outline-none min-w-[180px]"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingMsgContent.trim() && onEditMessage) {
+                              onEditMessage(msg.id, editingMsgContent.trim());
+                            }
+                            setEditingMsgId(null);
+                          }}
+                          className="p-1 rounded bg-indigo-600 text-white"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingMsgId(null)}
+                          className="p-1 rounded bg-slate-800 text-slate-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className={`p-3 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                          isMe
+                            ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20'
+                            : 'glass-card bg-slate-800/90 text-slate-200 rounded-tl-none border border-slate-700/60'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
