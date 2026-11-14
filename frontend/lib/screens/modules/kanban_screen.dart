@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/domain/kanban_columns.dart';
 import '../../core/models/studyflow_models.dart';
-import '../../state/studyflow_store.dart';
+import '../../providers/studyflow_provider.dart';
 
 class KanbanScreen extends StatefulWidget {
   const KanbanScreen({super.key, required this.store});

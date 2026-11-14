@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../state/studyflow_store.dart';
+import '../../providers/studyflow_provider.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key, required this.store});

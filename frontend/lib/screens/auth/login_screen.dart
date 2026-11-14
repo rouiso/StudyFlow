@@ -1,7 +1,10 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/models/studyflow_models.dart';
-import '../../core/services/prisma_api_service.dart';
-import '../../state/studyflow_store.dart';
+import '../../services/seed_data.dart';
+import '../../providers/studyflow_provider.dart';
+import '../../widgets/studyflow_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.store});
@@ -13,11 +16,29 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isRegisterMode = false;
+  bool _obscurePass = true;
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController(text: 'password123');
   late final TextEditingController _urlCtrl;
   bool _showServerConfig = false;
+
+  String _generateStrongPassword() {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#\$%&*?';
+    const all = '$upper$lower$digits$symbols';
+    final rng = Random.secure();
+    final chars = <String>[
+      upper[rng.nextInt(upper.length)],
+      lower[rng.nextInt(lower.length)],
+      digits[rng.nextInt(digits.length)],
+      symbols[rng.nextInt(symbols.length)],
+      for (var i = 0; i < 10; i++) all[rng.nextInt(all.length)],
+    ]..shuffle(rng);
+    return chars.join();
+  }
 
   @override
   void initState() {
@@ -63,32 +84,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Logo & Titre
-                  Center(
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4F46E5), Color(0xFF9333EA)],
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
-                            blurRadius: 18,
-                          ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'SF',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                        ),
-                      ),
-                    ),
+                  const Center(
+                    child: StudyFlowLogo(size: 60),
                   ),
                   const SizedBox(height: 14),
                   Text(
@@ -242,9 +239,43 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 12),
                         TextField(
                           controller: _passCtrl,
-                          obscureText: true,
+                          obscureText: _obscurePass,
                           style: const TextStyle(color: Colors.white, fontSize: 14),
-                          decoration: _inputDeco('Mot de passe', Icons.lock_outline),
+                          decoration: _inputDeco('Mot de passe', Icons.lock_outline).copyWith(
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isRegisterMode)
+                                  IconButton(
+                                    tooltip: 'Auto-générer un mot de passe',
+                                    icon: const Icon(Icons.auto_awesome, color: Color(0xFF818CF8), size: 18),
+                                    onPressed: () async {
+                                      final generated = _generateStrongPassword();
+                                      setState(() {
+                                        _passCtrl.text = generated;
+                                        _obscurePass = false;
+                                      });
+                                      await Clipboard.setData(ClipboardData(text: generated));
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Mot de passe généré et copié dans le presse-papiers'),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                IconButton(
+                                  tooltip: _obscurePass ? 'Afficher' : 'Masquer',
+                                  icon: Icon(
+                                    _obscurePass ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                    color: const Color(0xFF94A3B8),
+                                    size: 18,
+                                  ),
+                                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         FilledButton(

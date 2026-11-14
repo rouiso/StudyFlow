@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/models/studyflow_models.dart';
-import '../../state/studyflow_store.dart';
+import '../../providers/studyflow_provider.dart';
 
 class TeamsOverviewScreen extends StatelessWidget {
   const TeamsOverviewScreen({super.key, required this.store});

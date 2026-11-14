@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studyflow/core/models/studyflow_models.dart';
-import 'package:studyflow/core/services/prisma_api_service.dart';
+import 'package:studyflow/services/seed_data.dart';
 import 'package:studyflow/main.dart';
-import 'package:studyflow/state/studyflow_store.dart';
+import 'package:studyflow/providers/studyflow_provider.dart';
 
 void main() {
   testWidgets('starts on LoginScreen with demo profiles', (tester) async {

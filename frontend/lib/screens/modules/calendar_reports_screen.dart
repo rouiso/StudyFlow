@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/studyflow_models.dart';
-import '../../state/studyflow_store.dart';
+import '../../providers/studyflow_provider.dart';
 
 class CalendarReportsScreen extends StatefulWidget {
   const CalendarReportsScreen({super.key, required this.store});

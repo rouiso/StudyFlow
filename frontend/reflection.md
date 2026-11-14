@@ -1,74 +1,73 @@
 # StudyFlow — Dossier de Présentation & Réflexion Technique
-## Séance 2 (14) & Séance 3 Finale (21)
 
 ---
 
-## 1. Contexte & Choix d'Architecture (Séance 2)
+## 1. Contexte & Choix d'Architecture
 
 ### 1.1 Problématique & Objectif
-StudyFlow est une plateforme collaborative de gestion de projet universitaire (mini-Trello / Notion augmenté) dotée d'un espace de formations et de coaching pédagogique (Modules 1 à 7).
+StudyFlow est une plateforme collaborative de gestion de projet universitaire dotée d'un espace de formations et de coaching pédagogique.
 
-Pour répondre aux exigences de la **Séance 2**, le projet a mis en œuvre :
-- Une architecture hybride Web (PWA Next.js) et Mobile (Flutter / Dart).
-- Une couche backend robuste basée sur **Node.js / Next.js API Routes** adossée à l'ORM **Prisma** et une base relationnelle **SQLite / PostgreSQL**.
-- La consommation de services web via **REST API complète (CRUD)** pour consulter, créer, modifier et supprimer des ressources en direct depuis le client mobile Flutter.
+Le projet repose sur :
+- Une application client **Flutter / Dart** (Web & Mobile) structurée en couches par domaine (`models`, `services`, `repositories`, `providers`, `screens`, `widgets`).
+- Un serveur backend **Node.js / Express** (`backend/server.js`) adossé à **Prisma ORM** et une base relationnelle **SQLite** (`backend/prisma/schema.prisma`, `dev.db`), avec stockage local des fichiers dans `backend/uploads/`.
+- Une synchronisation complète (CRUD) temps réel entre le client Flutter et le backend, avec repli hors ligne (`StudyFlowSeedData`).
 
-### 1.2 Justification du choix de la stack Backend (Next.js + Prisma vs Firebase / Spring / Django)
-| Critère | Next.js 15 + Prisma (Choisi) | Firebase | Spring Boot / Django |
+### 1.2 Justification du choix de la stack Backend (Express + Prisma vs Firebase / Spring / Django)
+| Critère | Express + Prisma + SQLite (Choisi) | Firebase | Spring Boot / Django |
 | :--- | :--- | :--- | :--- |
-| **Typage de bout en bout** | Schéma déclaratif `schema.prisma` unique, typage strict TypeScript et équivalents Dart. | NoSQL non structuré, règles de sécurité complexes à maintenir. | Très verbeux (Spring) ou typage partiel (Django standard). |
-| **Règles métier strictes** | Contrôles d'accès précis (§4.2 : rôle COACH en lecture seule sur les tâches, §7.3 : confidentialité des notes privées). | Règles Firestore limitées pour les logiques transversales conditionnelles. | Possible mais demande une configuration lourde de controllers et d'entités. |
-| **Cohérence Web + Mobile** | La même base de données alimente à la fois l'application Web PWA et l'application mobile Flutter. | Nécessite des connecteurs séparés et une synchronisation manuelle. | Développements séparés. |
-| **Temps d'exécution & Démo** | Démarrage instantané, base SQLite embarquée sans dépendance cloud externe bloquante. | Dépend d'une connexion internet et de quotas de projet. | Démarrage lent (JVM). |
+| **Typage & Schéma unique** | Schéma déclaratif `schema.prisma` unique et modèles Dart alignés par domaine. | NoSQL non structuré, règles de sécurité complexes à maintenir. | Plus verbeux (Spring) ou configuration plus lourde. |
+| **Règles métier strictes** | Contrôles d'accès précis (rôle `COACH` en lecture seule sur les tâches, confidentialité des `privateNotes` vérifiée côté serveur). | Règles Firestore limitées pour les logiques transversales conditionnelles. | Possible mais demande davantage de boilerplate. |
+| **Multi-tenant & Isolation** | Chaque inscription crée sa propre équipe (`Team`), son projet initial et ses colonnes ; `/api/mobile/bootstrap` filtre strictement par `teamIds`. | Nécessite des règles de sécurité et index composites manuels. | Configuration manuelle des filtres par tenant. |
+| **Portabilité & Démo** | Démarrage immédiat avec SQLite embarqué, facilement migrable vers PostgreSQL. | Dépend d'une connexion cloud et de quotas externes. | Démarrage plus lent (JVM). |
 
 ---
 
-## 2. Évaluation de la Consommation de Web Services REST API (Séance 2)
+## 2. Consommation des Services Web & Synchronisation
 
-Le client mobile Flutter consomme les web services REST exposés par le serveur Next.js :
+Le client Flutter communique avec le backend via des services dédiés par domaine (`AuthApiService`, `SyncApiService`, `KanbanApiService`, `CalendarApiService`, `CommunicationApiService`, `CoachingApiService`) :
 
-| Action REST | Endpoint API | Description & Logique Métier Prisma |
+| Opération | Endpoint | Logique Métier |
 | :--- | :--- | :--- |
-| **GET (Consulter)** | `/api/mobile/bootstrap?userId={id}` | Récupère l'état complet du projet (projets, colonnes, tâches, sous-tâches, jalons, formations, sessions). Filtre strictement les `privateNotes` pour que seul le Coach puisse les lire. |
-| **POST (Créer)** | `/api/mobile/sync` (`CREATE_TASK`) | Crée une tâche avec ses sous-tâches et assignés dans Prisma. Journalise l'événement dans la table `Activity`. |
-| **PUT/POST (Modifier)** | `/api/mobile/sync` (`UPDATE_TASK` / `MOVE_TASK`) | Modifie le titre, la description, la priorité ou déplace la carte entre colonnes Kanban avec calcul de position. |
-| **DELETE (Supprimer)** | `/api/mobile/sync` (`DELETE_TASK`) | Supprime la tâche et ses sous-tâches en cascade. |
-| **POST (Authentification)** | `/api/mobile/auth` | Login et Inscription avec rattachement automatique à l'équipe. |
+| **Authentification** | `POST /api/mobile/auth` | Connexion (`login`) ou inscription (`register`) avec création automatique d'une équipe isolée, d'un projet de démarrage, de 3 colonnes et d'un canal. |
+| **Chargement initial** | `GET /api/mobile/bootstrap?userId={id}` | Retourne l'état complet des équipes dont l'utilisateur est membre (projets, colonnes, tâches, sous-tâches, jalons, messages, fichiers, formations, sessions, objectifs, compétences). |
+| **Mutations CRUD** | `POST /api/mobile/sync` | Point d'entrée transactionnel pour créer, modifier, déplacer ou supprimer des entités et journaliser l'activité. |
+| **Fichiers** | `GET /api/mobile/files/:id?inline=1` | Sert les fichiers uploadés depuis `backend/uploads/` pour prévisualisation directe (images, texte/code/markdown, PDF) ou téléchargement. |
 
-### Vérification des Permissions Métier (§4.2 & §7.3) :
-- Si un utilisateur ayant le rôle **`COACH`** ou **`VIEWER`** tente une action de création, modification ou suppression de tâche, l'API renvoie immédiatement un code **`HTTP 403 Forbidden`** et l'interface Flutter désactive les boutons correspondants.
-- Lors d'une inscription à une formation, si la capacité maximale est atteinte (`capacity`), l'API refuse l'inscription avec un message d'erreur explicite.
+### Vérification des Permissions Métier :
+- Un utilisateur **`COACH`** ou **`VIEWER`** ne peut pas créer, éditer ou déplacer des tâches (HTTP `403` côté backend et désactivation des actions côté UI).
+- Les notes privées (`privateNotes`) d'une séance de coaching ne peuvent être rédigées et consultées que par le coach de la séance (`coachId === userId`).
+- Une formation ayant atteint sa capacité maximale (`capacity`) rejette toute nouvelle inscription.
 
 ---
 
-## 3. Scénarios par Membre d'Équipe (Séance 3 — 15 points)
+## 3. Scénarios par Profil d'Équipe
 
-| Rôle | Membre Démo | Scénario & Parcours de Test |
+| Rôle | Profil | Parcours & Fonctionnalités Clés |
 | :--- | :--- | :--- |
-| **Chef de Projet (OWNER)** | **Léa Martin** | 1. Se connecte en 1 clic.<br>2. Crée et organise les colonnes Kanban.<br>3. Assigne des tâches aux membres.<br>4. Génère le rapport d'avancement global (M4). |
-| **Lead Developer (ADMIN)** | **Thomas Dubois** | 1. Filtre sur « Mes tâches » pour visualiser son travail.<br>2. Déplace une tâche vers *En cours* ou *Terminé*.<br>3. Coche les sous-tâches terminées.<br>4. Partage des fichiers de spécifications. |
-| **Développeuse (MEMBER)** | **Sarah Benali** | 1. Consulte ses tâches assignées.<br>2. S'inscrit à une formation technique disponible.<br>3. Envoie une demande de séance de coaching pédagogique.<br>4. Met à jour la progression de ses objectifs. |
-| **Coach Pédagogique (COACH)** | **Mme Claire Dupont** | 1. Accède en mode supervision (§4.2 : pas de modification des tâches étudiantes).<br>2. Confirme les créneaux de coaching demandés.<br>3. Rédige la synthèse partagée et **accède à ses notes privées confidentielles**.<br>4. Évalue les compétences des étudiants sur la matrice. |
+| **Chef de Projet (`OWNER`)** | **Léa Martin** | Crée et organise les colonnes Kanban, gère les projets, génère les rapports d'avancement, invite des membres via le code d'équipe. |
+| **Administrateur (`ADMIN`)** | **Karim Belkacem** | Filtre sur « Mes tâches », déplace les cartes entre colonnes, coche les sous-tâches, partage et prévisualise des fichiers. |
+| **Membre (`MEMBER`)** | **Sami Youssef** | Consulte ses tâches assignées, s'inscrit aux formations disponibles, demande une séance de coaching (créneau, durée, mode), suit ses objectifs. |
+| **Coach Pédagogique (`COACH`)** | **Mme Dupont** | Supervise les projets sans altérer les tâches étudiantes, crée des formations, confirme et clôture les séances avec synthèse partagée et **notes privées confidentielles**, évalue la matrice de compétences. |
 
 ---
 
-## 4. Fonctionnalités Avancées & IA (Séance 3 & Bonus)
+## 4. Fonctionnalités Avancées
 
-1. **Découpage Automatique de Tâches par IA (`aiBreakdownTask`) :**
-   - Lors de la création d'une tâche (ex: « Conception API Prisma »), le moteur d'assistance génère automatiquement 3 sous-tâches techniques pertinentes et estimées.
-2. **Agenda Multi-Sources Consolidé (Module 4) :**
-   - Fusionne en temps réel 4 flux temporels distincts avec codes couleurs : Échéances des tâches, Jalons du projet, Formations planifiées et Séances de coaching.
-3. **Bascule Instantanée de Session & Démo (1-clic) :**
-   - Sélecteur de persona en en-tête permettant au jury ou aux évaluateurs de basculer instantanément entre les 4 profils sans ressaisie de mot de passe.
+1. **Architecture Modulaire par Couches & Domaines :**
+   - Séparation stricte en `models/`, `services/`, `repositories/`, `providers/`, `screens/` et `widgets/`, découpée sur 5 domaines (`auth`, `kanban`, `calendar`, `communication`, `coaching`).
+2. **Découpage Automatique de Tâches (`aiBreakdownTask`) :**
+   - Génère automatiquement 3 sous-tâches pertinentes à partir du titre de la tâche lors de la création.
+3. **Agenda Mensuel & Multi-Sources :**
+   - Grille calendaire mensuelle interactive + flux chronologique fusionnant échéances de tâches, jalons, formations et séances de coaching.
+4. **Upload & Prévisualisation de Fichiers Réels :**
+   - Sélection multi-plateforme (`file_picker`), encodage Base64 vers `backend/uploads/`, stockage `File` + `FileVersion`, et visionneuse intégrée.
+5. **Création de Compte Sécurisée :**
+   - Générateur automatique de mot de passe robuste (`Random.secure()`) avec copie en 1 clic dans le presse-papiers.
 
 ---
 
-## 5. Justification des Choix Techniques (Notions de base Flutter — 5 points)
+## 5. Qualité, Tests & Résilience
 
-- **State Management (Store Réactif via `ChangeNotifier`) :**
-  - Utilisation du pattern Provider / ListenableBuilder natif Flutter : architecture découplée, propre, sans dépendances lourdes, assurant une réactivité immédiate de l'interface lors des appels API.
-- **Null Safety & Dart 3 :**
-  - Utilisation des records Dart, patterns exhaustifs pour les enums et null safety stricte garantissant zéro plantage au runtime.
-- **Résilience & Mode Hors-ligne :**
-  - Si le serveur backend Next.js n'est pas lancé, l'application bascule automatiquement sur les données seedées Prisma locales sans bloquer l'utilisateur.
-
+- **State Management Réactif :** `StudyFlowStore` (`ChangeNotifier`) composé de mixins par domaine (`AuthProviderMixin`, `KanbanProviderMixin`, `CalendarProviderMixin`, `CommunicationProviderMixin`, `CoachingProviderMixin`) avec mises à jour optimistes.
+- **Tests Automatisés (`flutter test`) :** 11 tests couvrant les contrats métier, la gestion des colonnes Kanban (réorganisation, interdiction de supprimer la dernière colonne, migration des tâches, préservation de `isDone`), l'indexation fractionnaire `calculateBetween`, la capacité des formations et les restrictions de rôle.
+- **Analyse Statique (`flutter analyze`) :** 0 erreur, 0 warning.

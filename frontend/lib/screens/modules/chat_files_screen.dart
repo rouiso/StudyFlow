@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../core/models/studyflow_models.dart';
-import '../../state/studyflow_store.dart';
+import '../../providers/studyflow_provider.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.store});

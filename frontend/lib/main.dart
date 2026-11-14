@@ -7,7 +7,8 @@ import 'screens/modules/kanban_screen.dart';
 import 'screens/modules/tasks_screen.dart';
 import 'screens/modules/teams_overview_screen.dart';
 import 'screens/modules/training_coaching_screen.dart';
-import 'state/studyflow_store.dart';
+import 'providers/studyflow_provider.dart';
+import 'widgets/studyflow_logo.dart';
 
 void main() => runApp(const StudyFlowApp());
 
@@ -119,9 +120,11 @@ class _StudyFlowShellState extends State<StudyFlowShell> {
         titleSpacing: isWide ? 16 : 8,
         title: Row(
           children: [
+            const StudyFlowLogo(size: 30),
+            const SizedBox(width: 10),
             Flexible(
               child: Text(
-                'StudyFlow · ${widget.store.activeProject.name}',
+                widget.store.activeProject.name,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
               ),
