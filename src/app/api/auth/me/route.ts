@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
 
     const primaryMembership = user.teamMembers[0];
     const needsOnboarding = user.teamMembers.length === 0;
+    const toIso = (val: unknown) => (val ? new Date(val as string | number | Date) : new Date()).toISOString();
 
     return NextResponse.json(
       {
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
           teamId: tm.teamId,
           userId: tm.userId,
           role: tm.role,
-          joinedAt: tm.joinedAt.toISOString(),
+          joinedAt: toIso(tm.joinedAt || tm.createdAt),
           team: {
             id: tm.team.id,
             name: tm.team.name,
@@ -61,20 +62,20 @@ export async function GET(req: NextRequest) {
             slug: tm.team.slug,
             ownerId: tm.team.ownerId,
             inviteToken: tm.team.inviteToken,
-            createdAt: tm.team.createdAt.toISOString(),
+            createdAt: toIso(tm.team.createdAt),
             members: tm.team.members.map((m) => ({
               id: m.id,
               teamId: m.teamId,
               userId: m.userId,
               role: m.role,
-              joinedAt: m.joinedAt.toISOString(),
+              joinedAt: toIso(m.joinedAt || m.createdAt),
               user: {
                 id: m.user.id,
                 name: m.user.name,
                 email: m.user.email,
                 avatar: m.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
                 role: m.role,
-                joinedAt: m.joinedAt.toISOString(),
+                joinedAt: toIso(m.joinedAt || m.createdAt),
               },
             })),
             projects: tm.team.projects.map((p) => ({
@@ -83,8 +84,8 @@ export async function GET(req: NextRequest) {
               name: p.name,
               description: p.description || '',
               color: p.color,
-              startDate: p.startDate ? p.startDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              endDate: p.endDate ? p.endDate.toISOString().split('T')[0] : new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+              startDate: p.startDate ? toIso(p.startDate).split('T')[0] : new Date().toISOString().split('T')[0],
+              endDate: p.endDate ? toIso(p.endDate).split('T')[0] : new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
               columns: p.columns.map((c) => ({
                 id: c.id,
                 projectId: c.projectId,

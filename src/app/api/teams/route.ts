@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
         : undefined;
       const ownerMember = t.members.find((m) => m.userId === t.ownerId);
 
+      const toIso = (val: unknown) => (val ? new Date(val as string | number | Date) : new Date()).toISOString();
+
       return {
         id: t.id,
         name: t.name,
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
         ownerId: t.ownerId,
         ownerName: ownerMember?.user?.name || 'Propriétaire',
         inviteToken: t.inviteToken,
-        createdAt: t.createdAt.toISOString(),
+        createdAt: toIso(t.createdAt),
         memberCount: t.members.length,
         isMember: !!myMembership,
         myRole: myMembership?.role || null,
@@ -41,14 +43,14 @@ export async function GET(req: NextRequest) {
           teamId: m.teamId,
           userId: m.userId,
           role: m.role,
-          joinedAt: m.joinedAt.toISOString(),
+          joinedAt: toIso(m.joinedAt || m.createdAt),
           user: {
             id: m.user.id,
             name: m.user.name,
             email: m.user.email,
             avatar: m.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
             role: m.role,
-            joinedAt: m.joinedAt.toISOString(),
+            joinedAt: toIso(m.joinedAt || m.createdAt),
           },
         })),
         projects: t.projects.map((p) => ({
@@ -57,8 +59,8 @@ export async function GET(req: NextRequest) {
           name: p.name,
           description: p.description || '',
           color: p.color,
-          startDate: p.startDate ? p.startDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          endDate: p.endDate ? p.endDate.toISOString().split('T')[0] : new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          startDate: p.startDate ? toIso(p.startDate).split('T')[0] : new Date().toISOString().split('T')[0],
+          endDate: p.endDate ? toIso(p.endDate).split('T')[0] : new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
           columns: p.columns.map((c) => ({
             id: c.id,
             projectId: c.projectId,
@@ -165,14 +167,14 @@ export async function POST(req: NextRequest) {
         slug: createdTeam.slug,
         ownerId: createdTeam.ownerId,
         inviteToken: createdTeam.inviteToken,
-        createdAt: createdTeam.createdAt.toISOString(),
+        createdAt: (createdTeam.createdAt ? new Date(createdTeam.createdAt) : new Date()).toISOString(),
       },
       membership: {
         id: membership.id,
         teamId: createdTeam.id,
         userId: user.id,
         role: 'OWNER',
-        joinedAt: membership.joinedAt.toISOString(),
+        joinedAt: (membership.joinedAt ? new Date(membership.joinedAt) : new Date()).toISOString(),
       },
       project: project
         ? {

@@ -223,9 +223,15 @@ async function findFirst(model: string, options: QueryOptions = {}): Promise<Doc
 async function create(model: string, args: { data: Record<string, any>; include?: Record<string, any>; select?: Record<string, boolean> }): Promise<Document> {
   const coll = await collection(model);
   const data = stripNested(args.data);
-  const document = {
+  const now = new Date();
+  const defaults: Record<string, any> = {
     id: data.id || generateId(model),
-    createdAt: data.createdAt || new Date(),
+    createdAt: data.createdAt || now,
+  };
+  if (model === 'teamMember' && !data.joinedAt) defaults.joinedAt = now;
+  if (model === 'trainingEnrollment' && !data.enrolledAt) defaults.enrolledAt = now;
+  const document = {
+    ...defaults,
     ...data,
   };
   await coll.insertOne(document);
@@ -237,11 +243,20 @@ async function create(model: string, args: { data: Record<string, any>; include?
 async function createMany(model: string, args: { data: Array<Record<string, any>> }): Promise<{ count: number }> {
   if (!args.data.length) return { count: 0 };
   const coll = await collection(model);
-  const documents = args.data.map((data) => ({
-    id: data.id || generateId(model),
-    createdAt: data.createdAt || new Date(),
-    ...stripNested(data),
-  }));
+  const now = new Date();
+  const documents = args.data.map((rawData) => {
+    const data = stripNested(rawData);
+    const defaults: Record<string, any> = {
+      id: data.id || generateId(model),
+      createdAt: data.createdAt || now,
+    };
+    if (model === 'teamMember' && !data.joinedAt) defaults.joinedAt = now;
+    if (model === 'trainingEnrollment' && !data.enrolledAt) defaults.enrolledAt = now;
+    return {
+      ...defaults,
+      ...data,
+    };
+  });
   const result = await coll.insertMany(documents);
   return { count: result.insertedCount };
 }
