@@ -63,6 +63,12 @@ function whereFilter(where: Record<string, any> = {}): Filter<Document> {
     } else if (value instanceof Date) {
       filter[key] = value;
     } else if (typeof value === 'object' && !Array.isArray(value)) {
+      const prismaOps = ['equals', 'not', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'contains', 'startsWith'];
+      const hasPrismaOp = prismaOps.some((op) => op in value);
+      if (key.includes('_') && !hasPrismaOp) {
+        Object.assign(filter, whereFilter(value));
+        continue;
+      }
       const operators: Record<string, any> = {};
       if ('equals' in value) operators.$eq = value.equals;
       if ('not' in value) operators.$ne = value.not;
@@ -74,6 +80,7 @@ function whereFilter(where: Record<string, any> = {}): Filter<Document> {
       if ('lte' in value) operators.$lte = value.lte;
       if ('contains' in value) operators.$regex = value.contains.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       if ('startsWith' in value) operators.$regex = `^${value.startsWith.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+      if (value.mode === 'insensitive' && operators.$regex) operators.$options = 'i';
       filter[key] = operators;
     } else {
       filter[key] = value;
@@ -243,8 +250,12 @@ async function update(model: string, args: { where: Record<string, any>; data: R
   const coll = await collection(model);
   const $set: Record<string, any> = {};
   for (const [key, value] of Object.entries(args.data)) {
-    if (value !== undefined && typeof value !== 'object') $set[key] = value;
-    else if (value !== undefined && value !== null && !('create' in value)) $set[key] = value;
+    if (value === undefined) continue;
+    if (value === null || typeof value !== 'object' || value instanceof Date || Array.isArray(value)) {
+      $set[key] = value;
+    } else if (!('create' in value || 'createMany' in value || 'update' in value)) {
+      $set[key] = value;
+    }
   }
   await coll.updateOne(whereFilter(args.where), { $set });
   const document = await coll.findOne(whereFilter(args.where));
