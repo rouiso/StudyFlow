@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Recherche de l'utilisateur dans la base de données Prisma
+    // Recherche de l'utilisateur dans MongoDB
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       include: {

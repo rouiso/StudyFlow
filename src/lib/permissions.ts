@@ -35,7 +35,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       }
     }
   } catch {
-    // En dehors d'un contexte de requête HTTP (ex: scripts / tests), fallback sur prisma.user.findFirst()
+    // En dehors d'un contexte de requête HTTP (ex: scripts / tests), fallback sur mongo.user.findFirst()
   }
 
   const user = await prisma.user.findFirst();

@@ -22,7 +22,7 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
       if (json.ok) {
         setDbData(json);
       } else {
-        setError(json.error || 'Erreur lecture SQLite');
+        setError(json.error || 'Erreur lecture MongoDB');
       }
     } catch (err: any) {
       setError(err.message || 'Impossible de joindre /api/database');
@@ -51,13 +51,13 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
             </div>
             <div>
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <span>Inspecteur Base de Données SQLite & Prisma (Soutenance)</span>
+                <span>Inspecteur Base de Données MongoDB (Soutenance)</span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                  prisma/dev.db
+                  MongoDB 7
                 </span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                Visualisation en direct des tables relationnelles SQLite (M1 à M7)
+                Visualisation en direct des collections MongoDB (M1 à M7)
               </p>
             </div>
           </div>
@@ -71,12 +71,12 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
               <span>Actualiser</span>
             </button>
             <a
-              href="http://localhost:5556"
+              href="http://localhost:27017"
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md"
             >
-              <span>Ouvrir Prisma Studio</span>
+              <span>MongoDB :27017</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
             <button
@@ -93,7 +93,7 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
           {/* Sidebar des tables */}
           <div className="w-full md:w-56 border-b md:border-b-0 md:border-r border-slate-800 p-3 overflow-y-auto bg-slate-950/40 space-y-1">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 pb-1">
-              Tables SQLite ({tableNames.length})
+              Collections ({tableNames.length})
             </div>
             {tableNames.map((tName) => {
               const count = tables[tName]?.length || 0;
@@ -128,7 +128,7 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
           <div className="flex-1 p-4 overflow-auto">
             {loading ? (
               <div className="py-16 text-center text-xs text-slate-400">
-                Chargement des tables SQLite depuis Prisma...
+                Chargement des collections MongoDB...
               </div>
             ) : error ? (
               <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">

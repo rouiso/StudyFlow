@@ -49,7 +49,7 @@ function buildSeedContent(name: string, mimeType: string): { buffer: Buffer; con
     ``,
     `2. ARCHITECTURE & SÉCURITÉ`,
     `- Authentification par session HTTP-Only et contrôle RBAC granulaire`,
-    `- Stockage hybride SQLite / Prisma + synchronisation hors-ligne`,
+    `- Stockage hybride MongoDB + synchronisation hors-ligne`,
     `- Quota d'équipe de 500 Mo et limite de 20 Mo par fichier`,
     `- Historique de versions (v1, v2...) et rattachement aux tâches Kanban`,
     ``,

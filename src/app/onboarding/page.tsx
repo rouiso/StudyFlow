@@ -246,7 +246,7 @@ export default function OnboardingPage() {
       const store = loadStudyFlowData();
       const activeUser = currentUser || store.currentUser;
 
-      // 1. Appel API serveur pour persister en base Prisma
+      // 1. Appel API serveur pour persister dans MongoDB
       const res = await fetch('/api/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

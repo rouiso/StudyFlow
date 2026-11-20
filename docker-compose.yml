@@ -1,18 +1,18 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: studyflow-postgres
+  mongodb:
+    image: mongo:7
+    container_name: studyflow-mongodb
     restart: always
     environment:
-      POSTGRES_USER: studyflow
-      POSTGRES_PASSWORD: studyflow
-      POSTGRES_DB: studyflow
+      MONGO_INITDB_ROOT_USERNAME: studyflow
+      MONGO_INITDB_ROOT_PASSWORD: studyflow
+      MONGO_INITDB_DATABASE: studyflow
     ports:
-      - '5432:5432'
+      - '27017:27017'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongodb_data:/data/db
 
   mailpit:
     image: axllent/mailpit:latest
@@ -28,5 +28,5 @@ services:
       - mailpit_data:/data
 
 volumes:
-  postgres_data:
+  mongodb_data:
   mailpit_data:

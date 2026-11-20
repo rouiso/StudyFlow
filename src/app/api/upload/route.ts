@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
       fallbackUser?.id ||
       'user-1';
 
-    // Vérifier que projectId et uploaderId existent dans Prisma avant insertion relationnelle
+    // Vérifier que projectId et uploaderId existent dans MongoDB avant insertion
     const [projectExists, userExists] = await Promise.all([
       prisma.project.findUnique({ where: { id: projectId } }),
       prisma.user.findUnique({ where: { id: uploaderId } }),

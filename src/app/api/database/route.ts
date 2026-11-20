@@ -48,8 +48,8 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: true,
-        engine: 'SQLite 3 + Prisma ORM 6.4.1 (prisma/dev.db)',
-        studioUrl: 'http://localhost:5556',
+        engine: 'MongoDB 7',
+        studioUrl: 'http://localhost:27017',
         tables: {
           User: users,
           Team: teams,
@@ -71,7 +71,7 @@ export async function GET() {
     );
   } catch (error: any) {
     return NextResponse.json(
-      { ok: false, error: error.message || 'Erreur lecture base SQLite' },
+      { ok: false, error: error.message || 'Erreur lecture base MongoDB' },
       { status: 500 }
     );
   }

@@ -9,14 +9,12 @@
     "lint": "next lint",
     "test": "tsx --test tests/business-logic.test.ts tests/user-management.test.ts",
     "realtime": "tsx realtime/server.ts",
-    "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:seed": "tsx scripts/seed-mongo.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.4.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
+    "mongodb": "^7.9.1",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -26,16 +24,13 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
+    "@next/swc-win32-x64-msvc": "^15.1.7",
     "@types/node": "^20.17.19",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.3",
-    "prisma": "^6.4.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   }
 }
