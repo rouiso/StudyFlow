@@ -1,4 +1,4 @@
-export type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'COACH' | 'VIEWER';
+export type UserRole = 'OWNER' | 'MEMBER' | 'COACH';
 export type TaskPriority = 'BASSE' | 'NORMALE' | 'HAUTE' | 'URGENTE';
 
 export interface User {

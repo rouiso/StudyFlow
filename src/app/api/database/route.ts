@@ -49,7 +49,7 @@ export async function GET() {
       {
         ok: true,
         engine: 'MongoDB 7',
-        studioUrl: 'http://localhost:27017',
+        studioUrl: 'mongodb://127.0.0.1:27017/studyflow',
         tables: {
           User: users,
           Team: teams,

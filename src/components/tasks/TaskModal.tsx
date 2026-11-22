@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Task, Subtask, Column, User, Label, TaskPriority } from '@/types';
 import { aiBreakdownTask } from '@/lib/ai-assistant';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface TaskModalProps {
   task: Task | null;
@@ -299,7 +300,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                     }`}
                   >
-                    <img src={u.avatar} alt={u.name} className="w-4 h-4 rounded-full object-cover" />
+                    <UserAvatar name={u.name} className="w-4 h-4 text-[6px]" />
                     <span>{u.name.split(' ')[0]}</span>
                   </button>
                 );

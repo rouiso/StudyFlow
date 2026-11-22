@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Task, Column, User, Activity, Project, ProjectReport } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface ProjectStatsViewProps {
   project: Project;
@@ -292,11 +293,7 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
               <div key={user.id} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <img
-                      src={user.avatar}
-                      alt={user.name}
-                      className="w-5 h-5 rounded-full object-cover"
-                    />
+                    <UserAvatar name={user.name} className="w-5 h-5 text-[7px]" />
                     <span className="font-medium text-slate-200">{user.name}</span>
                   </div>
                   <span className="text-slate-400">
@@ -331,14 +328,7 @@ export const ProjectStatsView: React.FC<ProjectStatsViewProps> = ({
                   className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-800 text-xs flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <img
-                      src={
-                        u?.avatar ||
-                        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-                      }
-                      alt={u?.name}
-                      className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-                    />
+                    <UserAvatar name={u?.name || 'Utilisateur'} className="w-5 h-5 text-[7px]" />
                     <span className="text-slate-300 truncate">
                       <strong className="text-slate-100">{u?.name || 'Membre'}</strong>{' '}
                       {renderActivityDescription(act)}

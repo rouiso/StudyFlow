@@ -71,12 +71,14 @@ export const DatabaseInspectorModal: React.FC<DatabaseInspectorModalProps> = ({ 
               <span>Actualiser</span>
             </button>
             <a
-              href="http://localhost:27017"
+              href="mongodb://127.0.0.1:27017/studyflow"
               target="_blank"
               rel="noreferrer"
+              title="Ouvrir la connexion dans MongoDB Compass"
+              aria-label="Ouvrir MongoDB Compass sur la base StudyFlow"
               className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md"
             >
-              <span>MongoDB :27017</span>
+              <span>Ouvrir Compass</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
             <button

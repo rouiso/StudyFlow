@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
                 id: m.user.id,
                 name: m.user.name,
                 email: m.user.email,
-                avatar: m.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                avatar: '',
                 role: m.role,
                 joinedAt: toIso(m.joinedAt || m.createdAt),
               },

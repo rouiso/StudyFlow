@@ -21,6 +21,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Column, Task, Subtask, User, Label, TaskPriority } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface KanbanBoardProps {
   columns: Column[];
@@ -84,8 +85,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
   const [confirmDeleteColId, setConfirmDeleteColId] = useState<string | null>(null);
 
-  const isCoachOrViewer = currentUser?.role === 'COACH' || currentUser?.role === 'VIEWER';
-  const canManageCols = !isCoachOrViewer;
+  const isCoach = currentUser?.role === 'COACH';
+  const canManageCols = !isCoach;
+  const openAddColumn = () => {
+    setNewColName('Nouvelle colonne');
+    setNewColWip('');
+    setIsAddingColumn(true);
+  };
 
   // Colonnes triées par position
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
@@ -170,7 +176,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   return (
     <div className="space-y-4">
       {/* Bannière de notification du rôle Coach / Observateur */}
-      {isCoachOrViewer && (
+      {isCoach && (
         <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between gap-3 text-xs text-purple-200 animate-fade-in shadow-lg">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center shrink-0">
@@ -253,22 +259,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           {/* Bouton Nouvelle Colonne rapide dans la barre d'outils */}
           {canManageCols && onAddColumn && (
             <button
-              onClick={() => setIsAddingColumn(true)}
+              onClick={openAddColumn}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-all"
             >
               <Plus className="w-3.5 h-3.5 text-indigo-400" />
-              <span>+ Colonne</span>
-            </button>
-          )}
-
-          {/* Bouton Nouvelle Tâche */}
-          {!isCoachOrViewer && (
-            <button
-              onClick={() => onOpenTaskModal(null)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all transform hover:scale-105"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Nouvelle Tâche</span>
+              <span>Nouvelle colonne</span>
             </button>
           )}
         </div>
@@ -599,10 +594,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     return (
                       <div
                         key={t.id}
-                        draggable={!isCoachOrViewer}
+                        draggable={!isCoach}
                         onDragStart={(e) => {
                           e.stopPropagation();
-                          if (!isCoachOrViewer) e.dataTransfer.setData('text/plain', t.id);
+                          if (!isCoach) e.dataTransfer.setData('text/plain', t.id);
                         }}
                         onClick={() => onOpenTaskModal(t)}
                         className={`glass-card glass-card-hover p-3.5 rounded-xl cursor-pointer group relative border border-slate-800 hover:border-indigo-500/40 ${
@@ -627,7 +622,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           </div>
 
                           {/* Boutons de déplacement rapide pour mobile (flèches gauche / droite) */}
-                          {!isCoachOrViewer && (
+                          {!isCoach && (
                             <div
                               className="flex items-center gap-0.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={(e) => e.stopPropagation()}
@@ -700,12 +695,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           {/* Avatars des assignés */}
                           <div className="flex items-center -space-x-1.5">
                             {assignedUsers.map((u) => (
-                              <img
+                              <UserAvatar
                                 key={u.id}
-                                src={u.avatar}
-                                alt={u.name}
-                                title={u.name}
-                                className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-900"
+                                name={u.name}
+                                className="w-5 h-5 text-[7px] ring-1 ring-slate-900"
                               />
                             ))}
                           </div>
@@ -717,7 +710,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Bouton rapide d'ajout au bas de la colonne */}
-              {!isCoachOrViewer ? (
+              {!isCoach ? (
                 <button
                   onClick={() => onOpenTaskModal(null, col.id)}
                   className="mt-2.5 w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/40 text-slate-400 hover:text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
@@ -741,11 +734,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <div className="rounded-2xl glass-panel bg-slate-900/90 border border-slate-700/80 p-3.5 space-y-3 animate-fade-in shadow-xl">
                 <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <Plus className="w-4 h-4 text-indigo-400" />
-                  <span>Nouvelle Colonne</span>
+                  <span>Nouvelle colonne</span>
                 </h4>
                 <input
                   type="text"
-                  placeholder="Titre de la colonne (ex: En test)..."
+                  placeholder="Nom de la colonne"
                   value={newColName}
                   onChange={(e) => setNewColName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
@@ -793,13 +786,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
             ) : (
               <button
-                onClick={() => setIsAddingColumn(true)}
+                onClick={openAddColumn}
                 className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-800/80 hover:border-indigo-500/40 hover:bg-slate-900/40 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-300 transition-all group"
               >
                 <div className="p-2 rounded-full bg-slate-800/80 group-hover:bg-indigo-600/20 text-slate-400 group-hover:text-indigo-400 transition-colors">
                   <Plus className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-semibold tracking-tight">Ajouter une colonne</span>
+                <span className="text-xs font-semibold tracking-tight">Nouvelle colonne</span>
               </button>
             )}
           </div>

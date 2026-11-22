@@ -21,6 +21,11 @@ import {
   SkillLevel,
   Feedback,
 } from '@/types';
+import {
+  DEMO_USERS,
+  FUTURE_DEMO_MILESTONES,
+  FUTURE_DEMO_TASKS,
+} from '@/lib/demo-data';
 
 export interface StudyFlowData {
   currentUser: User;
@@ -49,59 +54,55 @@ export interface StudyFlowData {
 }
 
 const STORAGE_KEY = 'studyflow_data_v1.1';
+const DEMO_USER_IDENTITIES = new Map(DEMO_USERS.map((user) => [user.id, user]));
+
+function normalizeDemoUsers(data: StudyFlowData): StudyFlowData {
+  const normalizeUser = (user: User): User => {
+    const identity = DEMO_USER_IDENTITIES.get(user.id);
+    return {
+      ...user,
+      ...(identity ? { name: identity.name, email: identity.email } : {}),
+      avatar: '',
+    };
+  };
+  const existingTaskIds = new Set(data.tasks.map((task) => task.id));
+  const existingMilestoneIds = new Set(data.milestones.map((milestone) => milestone.id));
+  return {
+    ...data,
+    currentUser: normalizeUser(data.currentUser),
+    users: data.users.map(normalizeUser),
+    projects: data.projects.map((project) =>
+      project.id === 'proj-1' ? { ...project, endDate: '2026-12-31' } : project
+    ),
+    tasks: [
+      ...data.tasks,
+      ...FUTURE_DEMO_TASKS.filter((task) => !existingTaskIds.has(task.id)),
+    ],
+    milestones: [
+      ...data.milestones,
+      ...FUTURE_DEMO_MILESTONES.filter((milestone) => !existingMilestoneIds.has(milestone.id)),
+    ],
+  };
+}
 
 // Seed data initial fidèle au cahier des charges StudyFlow
 export const initialData: StudyFlowData = {
   currentUser: {
-    id: 'user-1',
-    name: 'Léa Martin',
-    email: 'lea.martin@univ-etudiant.fr',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    role: 'OWNER',
-    joinedAt: '2026-09-01T08:00:00Z',
+    id: DEMO_USERS[0].id,
+    name: DEMO_USERS[0].name,
+    email: DEMO_USERS[0].email,
+    avatar: '',
+    role: DEMO_USERS[0].role,
+    joinedAt: DEMO_USERS[0].joinedAt,
   },
-  users: [
-    {
-      id: 'user-1',
-      name: 'Léa Martin',
-      email: 'lea.martin@univ-etudiant.fr',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-      role: 'OWNER',
-      joinedAt: '2026-09-01T08:00:00Z',
-    },
-    {
-      id: 'user-2',
-      name: 'Karim Belkacem',
-      email: 'karim.belkacem@univ-etudiant.fr',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-      role: 'ADMIN',
-      joinedAt: '2026-09-01T08:15:00Z',
-    },
-    {
-      id: 'user-3',
-      name: 'Sami Youssef',
-      email: 'sami.youssef@univ-etudiant.fr',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-      role: 'MEMBER',
-      joinedAt: '2026-09-02T10:00:00Z',
-    },
-    {
-      id: 'user-4',
-      name: 'Chloé Dubois',
-      email: 'chloe.dubois@univ-etudiant.fr',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      role: 'MEMBER',
-      joinedAt: '2026-09-03T14:30:00Z',
-    },
-    {
-      id: 'user-5',
-      name: 'Mme Dupont',
-      email: 'helene.dupont@univ-prof.fr',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      role: 'COACH',
-      joinedAt: '2026-09-05T09:00:00Z',
-    },
-  ],
+  users: DEMO_USERS.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    avatar: '',
+    role: user.role,
+    joinedAt: user.joinedAt,
+  })),
   teams: [
     {
       id: 'team-1',
@@ -115,7 +116,7 @@ export const initialData: StudyFlowData = {
   ],
   members: [
     { id: 'tm-1', teamId: 'team-1', userId: 'user-1', role: 'OWNER', joinedAt: '2026-09-01T08:00:00Z' },
-    { id: 'tm-2', teamId: 'team-1', userId: 'user-2', role: 'ADMIN', joinedAt: '2026-09-01T08:15:00Z' },
+    { id: 'tm-2', teamId: 'team-1', userId: 'user-2', role: 'MEMBER', joinedAt: '2026-09-01T08:15:00Z' },
     { id: 'tm-3', teamId: 'team-1', userId: 'user-3', role: 'MEMBER', joinedAt: '2026-09-02T10:00:00Z' },
     { id: 'tm-4', teamId: 'team-1', userId: 'user-4', role: 'MEMBER', joinedAt: '2026-09-03T14:30:00Z' },
     { id: 'tm-5', teamId: 'team-1', userId: 'user-5', role: 'COACH', joinedAt: '2026-09-05T09:00:00Z' },
@@ -128,7 +129,7 @@ export const initialData: StudyFlowData = {
       description: 'Plateforme mobile-first de gestion de projet étudiant avec mode hors-ligne et assistant IA.',
       color: '#4f46e5',
       startDate: '2026-10-01',
-      endDate: '2026-11-15',
+      endDate: '2026-12-31',
     },
     {
       id: 'proj-2',
@@ -268,6 +269,7 @@ export const initialData: StudyFlowData = {
       assigneeIds: ['user-3'],
       labelIds: ['lbl-2'],
     },
+    ...FUTURE_DEMO_TASKS,
   ],
   subtasks: [
     { id: 'sub-1', taskId: 'task-1', title: 'Définir manifest.json conforme W3C', done: true, position: 1 },
@@ -308,6 +310,7 @@ export const initialData: StudyFlowData = {
       description: 'Présentation orale et démonstration de bout en bout de StudyFlow.',
       completed: false,
     },
+    ...FUTURE_DEMO_MILESTONES,
   ],
   messages: [
     {
@@ -321,7 +324,7 @@ export const initialData: StudyFlowData = {
       id: 'msg-2',
       channelId: 'proj-1',
       authorId: 'user-2',
-      content: 'Super Léa ! Le Manifest PWA et les icônes sont configurés et testés.',
+      content: 'Super Achref ! Le Manifest PWA et les icônes sont configurés et testés.',
       createdAt: '2026-10-25T10:00:00Z',
     },
     {
@@ -594,8 +597,8 @@ export const initialData: StudyFlowData = {
       mode: 'ONLINE',
       meetingUrl: 'https://meet.jit.si/coaching-karim-dupont',
       status: 'DONE',
-      sharedReport: 'Validation du découpage par modules. Karim maîtrise les stratégies de mise en cache Service Worker et les requêtes optimistes.',
-      privateNotes: 'Karim est très autonome et moteur dans le groupe. Solide progression sur le local-first.',
+      sharedReport: 'Validation du découpage par modules. Mehdi maîtrise les stratégies de mise en cache Service Worker et les requêtes optimistes.',
+      privateNotes: 'Mehdi est très autonome et moteur dans le groupe. Solide progression sur le local-first.',
       createdAt: '2026-10-23T10:00:00Z',
     },
     {
@@ -612,7 +615,7 @@ export const initialData: StudyFlowData = {
       meetingUrl: 'https://meet.jit.si/coaching-sami-dupont',
       status: 'CONFIRMED',
       sharedReport: 'Point technique calé pour valider les relations n-à-n du module 3.',
-      privateNotes: 'Rassurer Sami sur la syntaxe des jointures Prisma.',
+      privateNotes: 'Rassurer Oumaima sur la syntaxe des jointures Prisma.',
       createdAt: '2026-10-24T14:30:00Z',
     },
     {
@@ -642,7 +645,7 @@ export const initialData: StudyFlowData = {
       location: 'Bureau B214 - Département Informatique',
       status: 'RESCHEDULED',
       sharedReport: 'Créneau décalé pour s’adapter aux disponibilités des 7 membres.',
-      privateNotes: 'Léa fait preuve d’un excellent leadership d’équipe.',
+      privateNotes: 'Achref fait preuve d’un excellent leadership d’équipe.',
       createdAt: '2026-10-22T17:00:00Z',
     },
   ],
@@ -729,17 +732,17 @@ export const initialData: StudyFlowData = {
 // Lecture depuis LocalStorage avec fallback sur initialData
 export function loadStudyFlowData(): StudyFlowData {
   if (typeof window === 'undefined') {
-    return initialData;
+    return normalizeDemoUsers(initialData);
   }
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       saveStudyFlowData(initialData);
-      return initialData;
+      return normalizeDemoUsers(initialData);
     }
     const parsed = JSON.parse(raw) as Partial<StudyFlowData>;
-    return {
+    const normalized = normalizeDemoUsers({
       ...initialData,
       ...parsed,
       folders: parsed.folders || initialData.folders,
@@ -749,10 +752,12 @@ export function loadStudyFlowData(): StudyFlowData {
       coachingGoals: parsed.coachingGoals || initialData.coachingGoals,
       skillLevels: parsed.skillLevels || initialData.skillLevels,
       feedbacks: parsed.feedbacks || initialData.feedbacks,
-    };
+    });
+    saveStudyFlowData(normalized);
+    return normalized;
   } catch (err) {
     console.error('Erreur lecture localStorage, utilisation des données initiales:', err);
-    return initialData;
+    return normalizeDemoUsers(initialData);
   }
 }
 
@@ -760,7 +765,7 @@ export function loadStudyFlowData(): StudyFlowData {
 export function saveStudyFlowData(data: StudyFlowData): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeDemoUsers(data)));
   } catch (err) {
     console.error('Erreur écriture localStorage:', err);
   }
@@ -769,5 +774,5 @@ export function saveStudyFlowData(data: StudyFlowData): void {
 // Réinitialiser les données aux valeurs de démo du cahier des charges
 export function resetToDemoData(): StudyFlowData {
   saveStudyFlowData(initialData);
-  return initialData;
+  return normalizeDemoUsers(initialData);
 }

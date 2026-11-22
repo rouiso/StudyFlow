@@ -5,9 +5,16 @@ import { assertPermission } from '@/lib/permissions';
 // GET /api/projects
 export async function GET(req: NextRequest) {
   try {
+    const userId = req.cookies.get('studyflow_session')?.value;
+    if (!userId) return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
     const teamId = req.nextUrl.searchParams.get('teamId') || undefined;
+    const memberships = await prisma.teamMember.findMany({ where: { userId } });
+    const teamIds = memberships.map((membership: any) => membership.teamId);
+    if (teamId && !teamIds.includes(teamId)) {
+      return NextResponse.json({ ok: false, error: 'Accès refusé à cette équipe.' }, { status: 403 });
+    }
     const projects = await prisma.project.findMany({
-      where: teamId ? { teamId } : undefined,
+      where: teamId ? { teamId } : { teamId: { in: teamIds } },
       include: {
         columns: { orderBy: { position: 'asc' } },
         labels: true,
@@ -33,6 +40,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
     const body = await req.json();
     const { teamId, name, description, color, startDate, endDate, templateColumns } = body;
 

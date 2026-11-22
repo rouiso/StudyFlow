@@ -28,6 +28,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Message, User, FileItem, FolderItem, Project, Task } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
 import {
   validateFileUpload,
   canDeleteFile,
@@ -38,6 +39,7 @@ import {
 } from '@/lib/file-manager';
 
 interface ProjectChatViewProps {
+  onOpenAiAssistant: (module: 'chat' | 'files') => void;
   project: Project;
   messages: Message[];
   users: User[];
@@ -70,6 +72,7 @@ const FOLDER_COLORS = [
 ];
 
 export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
+  onOpenAiAssistant,
   project,
   messages,
   users,
@@ -119,8 +122,8 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canWriteFiles = currentUser.role !== 'VIEWER';
-  const canPostChat = currentUser.role !== 'VIEWER';
+  const canWriteFiles = currentUser.role !== 'COACH';
+  const canPostChat = true;
 
   const projectFolders = useMemo(
     () => folders.filter((f) => f.projectId === project.id),
@@ -468,7 +471,15 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
         </div>
 
         {/* Indicateur de présence */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenAiAssistant(activeSubTab === 'files' ? 'files' : 'chat')}
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition-colors hover:bg-indigo-600/30"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Assistant IA {activeSubTab === 'files' ? 'Fichiers' : 'Chat'}
+          </button>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs text-slate-400 hidden sm:inline">
             {users.length} membres dans l&apos;équipe
@@ -484,20 +495,16 @@ export const ProjectChatView: React.FC<ProjectChatViewProps> = ({
               const author = users.find((u) => u.id === msg.authorId);
               const isMe = msg.authorId === currentUser.id;
               const canManageMsg =
-                isMe || currentUser.role === 'OWNER' || currentUser.role === 'ADMIN';
+                isMe || currentUser.role === 'OWNER';
 
               return (
                 <div
                   key={msg.id}
                   className={`flex items-start gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}
                 >
-                  <img
-                    src={
-                      author?.avatar ||
-                      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-                    }
-                    alt={author?.name}
-                    className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-700 flex-shrink-0 mt-0.5"
+                  <UserAvatar
+                    name={author?.name || 'Membre'}
+                    className="w-7 h-7 text-[9px] ring-1 ring-slate-700 mt-0.5"
                   />
 
                   <div className={`max-w-[75%] sm:max-w-[65%] ${isMe ? 'items-end' : ''}`}>

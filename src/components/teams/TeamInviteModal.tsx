@@ -22,6 +22,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { Team, User, TeamMember, UserRole } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
 import {
   ROLE_METADATA,
   getRolePermissions,
@@ -332,10 +333,8 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                 >
                   <option value="ALL">Tous les rôles ({teamMemberUsers.length})</option>
                   <option value="OWNER">OWNER (Propriétaire)</option>
-                  <option value="ADMIN">ADMIN (Administrateur)</option>
                   <option value="COACH">COACH (Enseignant)</option>
                   <option value="MEMBER">MEMBER (Contributeur)</option>
-                  <option value="VIEWER">VIEWER (Observateur)</option>
                 </select>
               </div>
 
@@ -374,11 +373,7 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                       className="p-3 rounded-xl bg-slate-800/60 border border-slate-800 hover:border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={member.avatar}
-                          alt={member.name}
-                          className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-700 shrink-0"
-                        />
+                        <UserAvatar name={member.name} className="w-8 h-8 text-[10px] ring-1 ring-slate-700" />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-slate-100 truncate">{member.name}</span>
@@ -410,10 +405,8 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-[11px] font-semibold text-slate-200 focus:ring-1 focus:ring-indigo-500"
                           >
-                            {effectiveRole === 'OWNER' && <option value="ADMIN">ADMIN (Administrateur)</option>}
                             <option value="COACH">COACH (Enseignant / Mentor)</option>
                             <option value="MEMBER">MEMBER (Contributeur)</option>
-                            <option value="VIEWER">VIEWER (Observateur)</option>
                           </select>
                         ) : (
                           <span
@@ -432,7 +425,7 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                             onClick={() => {
                               if (
                                 confirm(
-                                  `Transférer la propriété (OWNER) de l'équipe "${team.name}" à ${member.name} ? Vous passerez au rôle ADMIN.`
+                                  `Transférer la propriété (OWNER) de l'équipe "${team.name}" à ${member.name} ? Vous passerez au rôle MEMBER.`
                                 )
                               ) {
                                 onTransferOwnership(member.id);
@@ -626,7 +619,7 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                 </form>
               ) : (
                 <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400">
-                  Seuls le Propriétaire (<strong>OWNER</strong>) et les Administrateurs (<strong>ADMIN</strong>) peuvent ajouter directement des membres ou modifier les rôles.
+                  Seul le Propriétaire (<strong>OWNER</strong>) peut ajouter directement des membres ou modifier les rôles.
                 </div>
               )}
             </div>
@@ -640,7 +633,7 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
                   Hiérarchie et Permissions du Moteur de Gestion Utilisateurs
                 </span>
                 <div className="grid grid-cols-1 gap-2">
-                  {(['OWNER', 'ADMIN', 'COACH', 'MEMBER', 'VIEWER'] as UserRole[]).map((r) => {
+                  {(['OWNER', 'COACH', 'MEMBER'] as UserRole[]).map((r) => {
                     const meta = ROLE_METADATA[r];
                     const isCurrent = effectiveRole === r;
                     return (
@@ -861,7 +854,7 @@ export const TeamInviteModal: React.FC<TeamInviteModalProps> = ({
         {/* Pied de modale */}
         <div className="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0">
           <span className="text-[11px] text-slate-500">
-            Moteur RBAC StudyFlow : OWNER • ADMIN • COACH • MEMBER • VIEWER
+            Moteur RBAC StudyFlow : OWNER • MEMBER • COACH
           </span>
           <button
             onClick={onClose}

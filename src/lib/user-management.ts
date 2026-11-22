@@ -1,11 +1,9 @@
 import { User, Team, TeamMember, UserRole, Project, Column } from '@/types';
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
-  OWNER: 5,
-  ADMIN: 4,
-  COACH: 3,
-  MEMBER: 2,
-  VIEWER: 1,
+  OWNER: 3,
+  COACH: 2,
+  MEMBER: 1,
 };
 
 export interface RoleMetadata {
@@ -21,15 +19,8 @@ export const ROLE_METADATA: Record<UserRole, RoleMetadata> = {
     role: 'OWNER',
     label: 'Propriétaire (Owner)',
     shortLabel: 'OWNER',
-    description: 'Contrôle total : gestion des admins/membres, paramètres de l’équipe, transfert de propriété et suppression.',
+    description: 'Contrôle total : gestion de l’équipe et des rôles, paramètres, transfert de propriété et suppression.',
     badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-  },
-  ADMIN: {
-    role: 'ADMIN',
-    label: 'Administrateur (Admin)',
-    shortLabel: 'ADMIN',
-    description: 'Peut inviter des membres, gérer les rôles (Coach, Member, Viewer), créer des projets et gérer le Kanban.',
-    badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
   },
   COACH: {
     role: 'COACH',
@@ -45,13 +36,6 @@ export const ROLE_METADATA: Record<UserRole, RoleMetadata> = {
     description: 'Crée, déplace et complète les tâches, participe au chat, partage des fichiers et s’inscrit aux formations.',
     badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   },
-  VIEWER: {
-    role: 'VIEWER',
-    label: 'Observateur (Viewer)',
-    shortLabel: 'VIEWER',
-    description: 'Accès en lecture seule aux tableaux Kanban, au calendrier et aux indicateurs du projet.',
-    badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
-  },
 };
 
 export interface RolePermissions {
@@ -66,6 +50,7 @@ export interface RolePermissions {
   canDeleteProject: boolean;
   canManageColumns: boolean;
   canWriteTasks: boolean;
+  canWriteFiles: boolean;
   canManageTrainings: boolean;
   canAssessSkills: boolean;
   canPostMessages: boolean;
@@ -77,29 +62,27 @@ export function hasMinRole(userRole: UserRole, minRole: UserRole): boolean {
 
 export function getRolePermissions(role: UserRole): RolePermissions {
   return {
-    canManageTeamSettings: role === 'OWNER' || role === 'ADMIN',
+    canManageTeamSettings: role === 'OWNER',
     canDeleteTeam: role === 'OWNER',
     canTransferOwnership: role === 'OWNER',
-    canInviteMembers: role === 'OWNER' || role === 'ADMIN',
-    canRegenerateInviteToken: role === 'OWNER' || role === 'ADMIN',
-    canManageRoles: role === 'OWNER' || role === 'ADMIN',
-    canRemoveMembers: role === 'OWNER' || role === 'ADMIN',
-    canCreateProject: role === 'OWNER' || role === 'ADMIN',
-    canDeleteProject: role === 'OWNER' || role === 'ADMIN',
-    canManageColumns: role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER',
-    canWriteTasks: role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER',
-    canManageTrainings: role === 'OWNER' || role === 'ADMIN' || role === 'COACH',
-    canAssessSkills: role === 'OWNER' || role === 'ADMIN' || role === 'COACH',
-    canPostMessages: role !== 'VIEWER',
+    canInviteMembers: role === 'OWNER',
+    canRegenerateInviteToken: role === 'OWNER',
+    canManageRoles: role === 'OWNER',
+    canRemoveMembers: role === 'OWNER',
+    canCreateProject: role === 'OWNER',
+    canDeleteProject: role === 'OWNER',
+    canManageColumns: role === 'OWNER' || role === 'MEMBER',
+    canWriteTasks: role === 'OWNER' || role === 'MEMBER',
+    canWriteFiles: role === 'OWNER' || role === 'MEMBER',
+    canManageTrainings: role === 'OWNER' || role === 'COACH',
+    canAssessSkills: role === 'OWNER' || role === 'COACH',
+    canPostMessages: true,
   };
 }
 
 export function getAssignableRoles(actorRole: UserRole): UserRole[] {
   if (actorRole === 'OWNER') {
-    return ['ADMIN', 'COACH', 'MEMBER', 'VIEWER'];
-  }
-  if (actorRole === 'ADMIN') {
-    return ['COACH', 'MEMBER', 'VIEWER'];
+    return ['COACH', 'MEMBER'];
   }
   return [];
 }
@@ -114,17 +97,14 @@ export function canChangeMemberRole(params: {
 }): { allowed: boolean; reason?: string } {
   const { actorId, actorRole, targetId, targetRole, newRole, teamOwnerId } = params;
 
+  if (newRole !== 'MEMBER' && newRole !== 'COACH') {
+    return { allowed: false, reason: 'Le rôle demandé est invalide.' };
+  }
+
   if (targetId === teamOwnerId || targetRole === 'OWNER') {
     return {
       allowed: false,
       reason: 'Le rôle du propriétaire (OWNER) ne peut être modifié que via un transfert de propriété.',
-    };
-  }
-
-  if (newRole === 'OWNER') {
-    return {
-      allowed: false,
-      reason: 'Utilisez la fonction de transfert de propriété pour nommer un nouveau OWNER.',
     };
   }
 
@@ -136,22 +116,6 @@ export function canChangeMemberRole(params: {
   }
 
   if (actorRole === 'OWNER') {
-    return { allowed: true };
-  }
-
-  if (actorRole === 'ADMIN') {
-    if (targetRole === 'ADMIN') {
-      return {
-        allowed: false,
-        reason: 'Seul le propriétaire (OWNER) peut modifier le rôle d’un administrateur.',
-      };
-    }
-    if (newRole === 'ADMIN') {
-      return {
-        allowed: false,
-        reason: 'Seul le propriétaire (OWNER) peut promouvoir un membre au rang d’administrateur (ADMIN).',
-      };
-    }
     return { allowed: true };
   }
 
@@ -183,16 +147,6 @@ export function canRemoveTeamMember(params: {
   }
 
   if (actorRole === 'OWNER') {
-    return { allowed: true };
-  }
-
-  if (actorRole === 'ADMIN') {
-    if (targetRole === 'ADMIN') {
-      return {
-        allowed: false,
-        reason: 'Seul le propriétaire (OWNER) peut retirer un administrateur de l’équipe.',
-      };
-    }
     return { allowed: true };
   }
 
@@ -311,7 +265,7 @@ export function transferTeamOwnership(
   const updatedMembers = members.map((m) => {
     if (m.teamId !== team.id) return m;
     if (m.userId === newOwnerId) return { ...m, role: 'OWNER' as UserRole };
-    if (m.userId === actorId) return { ...m, role: 'ADMIN' as UserRole };
+    if (m.userId === actorId) return { ...m, role: 'MEMBER' as UserRole };
     return m;
   });
 

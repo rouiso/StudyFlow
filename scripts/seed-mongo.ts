@@ -1,4 +1,5 @@
 import { prisma, $disconnect } from '../src/lib/prisma';
+import { DEMO_USERS, FUTURE_DEMO_MILESTONES, FUTURE_DEMO_TASKS } from '../src/lib/demo-data';
 
 async function main() {
   const modelNames = [
@@ -13,13 +14,7 @@ async function main() {
     await (prisma as any)[modelName].deleteMany();
   }
 
-  const users = [
-    { id: 'user-1', name: 'Léa Martin', email: 'lea.martin@univ-etudiant.fr', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' },
-    { id: 'user-2', name: 'Karim Belkacem', email: 'karim.belkacem@univ-etudiant.fr', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' },
-    { id: 'user-3', name: 'Sami Youssef', email: 'sami.youssef@univ-etudiant.fr', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150' },
-    { id: 'user-4', name: 'Chloé Dubois', email: 'chloe.dubois@univ-etudiant.fr', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' },
-    { id: 'user-5', name: 'Mme Dupont', email: 'helene.dupont@univ-prof.fr', image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150' },
-  ];
+  const users = DEMO_USERS.map(({ id, name, email }) => ({ id, name, email, image: '' }));
   await prisma.user.createMany({ data: users });
 
   await prisma.team.create({
@@ -33,7 +28,7 @@ async function main() {
       members: {
         create: [
           { id: 'tm-1', userId: 'user-1', role: 'OWNER' },
-          { id: 'tm-2', userId: 'user-2', role: 'ADMIN' },
+          { id: 'tm-2', userId: 'user-2', role: 'MEMBER' },
           { id: 'tm-3', userId: 'user-3', role: 'MEMBER' },
           { id: 'tm-4', userId: 'user-4', role: 'MEMBER' },
           { id: 'tm-5', userId: 'user-5', role: 'COACH' },
@@ -46,7 +41,7 @@ async function main() {
           description: 'Plateforme mobile-first de gestion de projet étudiant.',
           color: '#4f46e5',
           startDate: new Date('2026-10-01'),
-          endDate: new Date('2026-11-15'),
+          endDate: new Date('2026-12-31'),
           columns: {
             create: [
               { id: 'col-1', name: 'À faire', position: 1000, isDone: false },
@@ -79,6 +74,25 @@ async function main() {
       },
       assignees: { create: [{ userId: 'user-4' }] },
     },
+  });
+
+  for (const task of FUTURE_DEMO_TASKS) {
+    const { assigneeIds, labelIds, dueDate, createdAt, ...taskData } = task;
+    await prisma.task.create({
+      data: {
+        ...taskData,
+        dueDate: new Date(`${dueDate}T12:00:00.000Z`),
+        createdAt: new Date(createdAt),
+        assignees: { create: assigneeIds.map((userId) => ({ userId })) },
+        labels: { create: labelIds.map((labelId) => ({ labelId })) },
+      },
+    });
+  }
+  await prisma.milestone.createMany({
+    data: FUTURE_DEMO_MILESTONES.map((milestone) => ({
+      ...milestone,
+      date: new Date(`${milestone.date}T12:00:00.000Z`),
+    })),
   });
 
   await prisma.channel.create({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getCurrentUser } from '@/lib/permissions';
+import { assertPermission } from '@/lib/permissions';
 import { FORBIDDEN_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_TEAM_QUOTA_BYTES } from '@/lib/file-manager';
 import fs from 'fs';
 import path from 'path';
@@ -8,6 +8,9 @@ import path from 'path';
 export async function GET(req: NextRequest) {
   try {
     const projectId = req.nextUrl.searchParams.get('projectId') || 'proj-1';
+    const userId = req.cookies.get('studyflow_session')?.value;
+    if (!userId) return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    await assertPermission('view_files', { projectId, userId });
     const [files, folders] = await Promise.all([
       prisma.file.findMany({
         where: { projectId },
@@ -32,16 +35,47 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as globalThis.File | null;
-    const projectId = (formData.get('projectId') as string) || 'proj-1';
+    const projectId = (formData.get('projectId') as string) || '';
     const taskId = (formData.get('taskId') as string) || null;
     const folderId = (formData.get('folderId') as string) || null;
     const targetFileId = (formData.get('targetFileId') as string) || null;
+    const uploaderId = req.cookies.get('studyflow_session')?.value;
 
+    if (!uploaderId) {
+      return NextResponse.json({ ok: false, error: { code: 'UNAUTHENTICATED', message: 'Authentification requise.' } }, { status: 401 });
+    }
+    if (!projectId) {
+      return NextResponse.json({ ok: false, error: { code: 'PROJECT_REQUIRED', message: 'projectId requis.' } }, { status: 400 });
+    }
+    await assertPermission('upload_file', { projectId, userId: uploaderId });
     if (!file) {
       return NextResponse.json(
         { ok: false, error: { code: 'NO_FILE', message: 'Aucun fichier reçu' } },
         { status: 400 }
       );
+    }
+
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) {
+      return NextResponse.json({ ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Projet introuvable.' } }, { status: 404 });
+    }
+    const [user, task, folder, target] = await Promise.all([
+      prisma.user.findUnique({ where: { id: uploaderId } }),
+      taskId ? prisma.task.findUnique({ where: { id: taskId } }) : Promise.resolve(null),
+      folderId ? prisma.folder.findUnique({ where: { id: folderId } }) : Promise.resolve(null),
+      targetFileId ? prisma.file.findUnique({ where: { id: targetFileId } }) : Promise.resolve(null),
+    ]);
+    if (!user) {
+      return NextResponse.json({ ok: false, error: { code: 'USER_NOT_FOUND', message: 'Utilisateur introuvable.' } }, { status: 401 });
+    }
+    if (taskId && (!task || task.projectId !== projectId)) {
+      return NextResponse.json({ ok: false, error: { code: 'INVALID_TASK', message: 'La tâche n’appartient pas à ce projet.' } }, { status: 400 });
+    }
+    if (folderId && (!folder || folder.projectId !== projectId)) {
+      return NextResponse.json({ ok: false, error: { code: 'INVALID_FOLDER', message: 'Le dossier n’appartient pas à ce projet.' } }, { status: 400 });
+    }
+    if (targetFileId && (!target || target.projectId !== projectId)) {
+      return NextResponse.json({ ok: false, error: { code: 'INVALID_TARGET', message: 'Le fichier à versionner n’appartient pas à ce projet.' } }, { status: 400 });
     }
 
     // 1. Contrôle de taille (Max 20 Mo par fichier)
@@ -85,50 +119,12 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     fs.writeFileSync(filePath, Buffer.from(bytes));
 
-    // 5. Identification de l'utilisateur authentifié
-    const sessionUser = await getCurrentUser().catch(() => null);
-    const fallbackUser = !sessionUser ? await prisma.user.findFirst() : null;
-    const uploaderId =
-      sessionUser?.id ||
-      (formData.get('uploaderId') as string) ||
-      fallbackUser?.id ||
-      'user-1';
-
-    // Vérifier que projectId et uploaderId existent dans MongoDB avant insertion
-    const [projectExists, userExists] = await Promise.all([
-      prisma.project.findUnique({ where: { id: projectId } }),
-      prisma.user.findUnique({ where: { id: uploaderId } }),
-    ]);
-
-    if (!projectExists || !userExists) {
-      // Si le projet ou l'utilisateur a été créé uniquement en mode LocalStorage client, retourner le descripteur de fichier sauvegardé sur disque
-      return NextResponse.json({
-        ok: true,
-        data: {
-          id: `file-${Date.now()}`,
-          projectId,
-          taskId,
-          folderId,
-          uploaderId,
-          name: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          size: file.size,
-          currentVersion: 1,
-          storageKey: safeFileName,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
-
     // Vérifier si un fichier existant doit être versionné (v1 -> v2...)
     const existingFile = targetFileId
       ? await prisma.file.findUnique({ where: { id: targetFileId } })
       : await prisma.file.findFirst({
           where: { projectId, name: file.name },
         });
-
-    const validTask = taskId ? await prisma.task.findUnique({ where: { id: taskId } }) : null;
-    const validFolder = folderId ? await prisma.folder.findUnique({ where: { id: folderId } }) : null;
 
     if (existingFile) {
       const nextVersion = existingFile.currentVersion + 1;
@@ -138,8 +134,8 @@ export async function POST(req: NextRequest) {
           size: file.size,
           mimeType: file.type || existingFile.mimeType,
           uploaderId,
-          taskId: validTask ? validTask.id : existingFile.taskId,
-          folderId: validFolder ? validFolder.id : existingFile.folderId,
+          taskId: task ? task.id : existingFile.taskId,
+          folderId: folder ? folder.id : existingFile.folderId,
           currentVersion: nextVersion,
           versions: {
             create: {
@@ -159,8 +155,8 @@ export async function POST(req: NextRequest) {
     const fileRecord = await prisma.file.create({
       data: {
         projectId,
-        taskId: validTask ? validTask.id : undefined,
-        folderId: validFolder ? validFolder.id : undefined,
+        taskId: task ? task.id : undefined,
+        folderId: folder ? folder.id : undefined,
         uploaderId,
         name: file.name,
         mimeType: file.type || 'application/octet-stream',

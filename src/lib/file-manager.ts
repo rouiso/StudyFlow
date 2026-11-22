@@ -14,7 +14,7 @@ export interface FileValidationResult {
 
 /**
  * Valide un téléversement de fichier selon le Cahier des Charges (Module 6) :
- * - Rôle autorisé (VIEWER interdit)
+ * - COACH : aucun droit d’écriture sur les fichiers du projet
  * - Extensions exécutables interdites (.exe, .bat, .sh, .cmd, .msi)
  * - Taille max par fichier : 20 Mo
  * - Quota max par équipe/projet : 500 Mo
@@ -27,11 +27,11 @@ export function validateFileUpload(params: {
 }): FileValidationResult {
   const { fileName, fileSize, currentTotalBytes, userRole } = params;
 
-  if (userRole === 'VIEWER') {
+  if (userRole === 'COACH') {
     return {
       valid: false,
       code: 'FORBIDDEN_ROLE',
-      message: 'Le rôle Observateur (VIEWER) ne permet pas de déposer des fichiers.',
+      message: 'Le rôle COACH ne permet pas de déposer des fichiers.',
     };
   }
 
@@ -187,13 +187,13 @@ export function appendOrVersionFile(
 
 /**
  * Vérifie si un utilisateur peut supprimer un fichier selon son rôle RBAC :
- * - VIEWER : jamais
- * - OWNER / ADMIN : tout fichier du projet
- * - COACH / MEMBER : uniquement les fichiers qu'il a lui-même déposés
+ * - COACH : jamais
+ * - OWNER : tout fichier du projet
+ * - MEMBER : uniquement les fichiers qu'il a lui-même déposés
  */
 export function canDeleteFile(file: FileItem, userId: string, userRole: UserRole): boolean {
-  if (userRole === 'VIEWER') return false;
-  if (userRole === 'OWNER' || userRole === 'ADMIN') return true;
+  if (userRole === 'COACH') return false;
+  if (userRole === 'OWNER') return true;
   if (file.uploaderId === userId) return true;
   if (file.versions?.some((v) => v.uploaderId === userId)) return true;
   return false;

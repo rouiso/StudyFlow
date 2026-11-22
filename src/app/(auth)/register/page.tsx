@@ -14,9 +14,11 @@ import {
   PlusCircle,
   KeyRound,
   Compass,
+  Sparkles,
 } from 'lucide-react';
 import { loadStudyFlowData, saveStudyFlowData } from '@/lib/storage';
 import { createTeamWithOwner, joinTeamWithToken } from '@/lib/user-management';
+import { generateSecurePassword } from '@/lib/password-generator';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -50,6 +52,17 @@ export default function RegisterPage() {
 
   const strengthScore = [hasMinLength, hasUpper, hasNumber, hasSpecial].filter(Boolean).length;
   const strengthPercent = (strengthScore / 4) * 100;
+
+  const handleGeneratePassword = () => {
+    try {
+      setPassword(generateSecurePassword());
+      setShowPassword(true);
+      setErrorMessage('');
+    } catch (error) {
+      console.error('Échec de la génération sécurisée du mot de passe:', error);
+      setErrorMessage('La génération sécurisée est indisponible. Saisissez votre propre mot de passe.');
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +123,7 @@ export default function RegisterPage() {
           id: data.user.id,
           name: data.user.name,
           email: data.user.email,
-          avatar: data.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          avatar: '',
           role: (data.user.role || (teamChoice === 'create' ? 'OWNER' : 'MEMBER')) as any,
           joinedAt: new Date().toISOString(),
         };
@@ -240,15 +253,27 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Mot de passe (8 caractères minimum)
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label htmlFor="register-password" className="block text-xs font-semibold text-slate-300">
+                  Mot de passe (8 caractères minimum)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGeneratePassword}
+                  className="text-[10px] sm:text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Générer un mot de passe sûr
+                </button>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  id="register-password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="new-password"
+                  maxLength={128}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -262,6 +287,9 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Créé dans votre navigateur; aucun mot de passe n’est envoyé à une IA.
+              </p>
 
               {/* Password strength meter */}
               {password.length > 0 && (

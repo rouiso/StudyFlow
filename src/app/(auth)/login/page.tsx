@@ -1,51 +1,57 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, Shield, UserCheck, GraduationCap } from 'lucide-react';
+import { UserAvatar } from '@/components/UserAvatar';
 
 const DEMO_ACCOUNTS = [
   {
-    name: 'Léa Martin',
-    email: 'lea.martin@univ-etudiant.fr',
+    name: 'Achref Arous',
+    email: 'achraflarousse52@gmail.com',
     role: 'OWNER',
     roleLabel: 'Propriétaire (Owner)',
     color: 'from-indigo-500/20 to-purple-500/20 border-indigo-500/40 text-indigo-300',
     icon: Shield,
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
   },
   {
-    name: 'Karim Belkacem',
-    email: 'karim.belkacem@univ-etudiant.fr',
-    role: 'ADMIN',
-    roleLabel: 'Administrateur (Admin)',
+    name: 'Mehdi Joudi',
+    email: 'mehdijoudi01@gmail.com',
+    role: 'MEMBER',
+    roleLabel: 'Membre Contributeur',
     color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/40 text-blue-300',
     icon: UserCheck,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
   },
   {
-    name: 'Sami Youssef',
-    email: 'sami.youssef@univ-etudiant.fr',
+    name: 'Oumaima Rouis',
+    email: 'oumaimarouis58@gmail.com',
     role: 'MEMBER',
     roleLabel: 'Membre Contributeur',
     color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/40 text-emerald-300',
     icon: UserCheck,
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
   },
   {
-    name: 'Mme Dupont',
-    email: 'helene.dupont@univ-prof.fr',
+    name: 'Iheb Kouki',
+    email: 'iehb.kouki@esprit.tn',
+    role: 'MEMBER',
+    roleLabel: 'Membre Contributeur',
+    color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/40 text-blue-300',
+    icon: UserCheck,
+  },
+  {
+    name: 'Maysa Tebai',
+    email: 'maysa.tebai@esprit.tn',
     role: 'COACH',
     roleLabel: 'Coach Pédagogique (v1.1)',
     color: 'from-purple-500/20 to-pink-500/20 border-purple-500/40 text-purple-300',
     icon: GraduationCap,
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
   },
 ];
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('password123');
+  const [password, setPassword] = useState('');
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,7 +88,7 @@ export default function LoginPage() {
             id: data.user.id,
             name: data.user.name,
             email: data.user.email,
-            avatar: data.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            avatar: '',
             role: data.user.role || 'MEMBER',
             joinedAt: new Date().toISOString(),
           };
@@ -116,9 +122,11 @@ export default function LoginPage() {
     submitLogin(email, password);
   };
 
-  const handleQuickLogin = (demoEmail: string) => {
+  const handleDemoAccountSelect = (demoEmail: string) => {
     setEmail(demoEmail);
-    submitLogin(demoEmail, 'password123');
+    setPassword('');
+    setErrorMessage('');
+    passwordInputRef.current?.focus();
   };
 
   return (
@@ -135,14 +143,14 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Quick Demo Login Cards */}
+        {/* Demo account selector */}
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              Connexion rapide (Comptes Démo)
+              Sélectionner un compte de démonstration
             </span>
-            <span className="text-[10px] text-slate-500">1-clic</span>
+            <span className="text-[10px] text-slate-500">E-mail uniquement</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -151,15 +159,12 @@ export default function LoginPage() {
                 <button
                   key={acc.email}
                   type="button"
-                  onClick={() => handleQuickLogin(acc.email)}
+                  onClick={() => handleDemoAccountSelect(acc.email)}
                   disabled={isLoading}
+                  aria-pressed={email === acc.email}
                   className={`p-2.5 rounded-xl border bg-gradient-to-br ${acc.color} hover:brightness-125 transition-all text-left flex items-start gap-2.5 group`}
                 >
-                  <img
-                    src={acc.avatar}
-                    alt={acc.name}
-                    className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20 shrink-0"
-                  />
+                  <UserAvatar name={acc.name} className="w-7 h-7 text-[9px] ring-1 ring-white/20" />
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-semibold text-white truncate group-hover:text-indigo-200">
                       {acc.name}
@@ -198,7 +203,7 @@ export default function LoginPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="lea.martin@univ-etudiant.fr"
+                  placeholder="achraflarousse52@gmail.com"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
@@ -216,9 +221,11 @@ export default function LoginPage() {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  ref={passwordInputRef}
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
+                  maxLength={128}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

@@ -14,6 +14,10 @@ export async function GET(
 ) {
   try {
     const { teamId } = await context.params;
+    const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
     const team = await prisma.team.findUnique({
       where: { id: teamId },
       include: {
@@ -26,6 +30,9 @@ export async function GET(
 
     if (!team) {
       return NextResponse.json({ ok: false, error: 'Équipe introuvable.' }, { status: 404 });
+    }
+    if (!team.members.some((member) => member.userId === sessionUserId)) {
+      return NextResponse.json({ ok: false, error: 'Accès refusé à cette équipe.' }, { status: 403 });
     }
 
     return NextResponse.json({
@@ -49,7 +56,7 @@ export async function GET(
           id: m.user.id,
           name: m.user.name,
           email: m.user.email,
-          avatar: m.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          avatar: '',
           role: m.role,
           joinedAt: m.joinedAt.toISOString(),
         },
@@ -89,7 +96,7 @@ export async function POST(
     const perms = getRolePermissions(actorRole);
     if (!perms.canInviteMembers) {
       return NextResponse.json(
-        { ok: false, error: 'Seuls le Propriétaire (OWNER) et les Administrateurs (ADMIN) peuvent ajouter des membres.' },
+        { ok: false, error: 'Seul le Propriétaire (OWNER) peut ajouter des membres.' },
         { status: 403 }
       );
     }
@@ -110,11 +117,8 @@ export async function POST(
       );
     }
 
-    if (requestedRole === 'ADMIN' && actorRole !== 'OWNER') {
-      return NextResponse.json(
-        { ok: false, error: 'Seul le Propriétaire (OWNER) peut nommer un Administrateur (ADMIN).' },
-        { status: 403 }
-      );
+    if (!['MEMBER', 'COACH'].includes(requestedRole)) {
+      return NextResponse.json({ ok: false, error: 'Rôle invalide.' }, { status: 400 });
     }
 
     let targetUser = await prisma.user.findUnique({ where: { email } });
@@ -123,7 +127,7 @@ export async function POST(
         data: {
           name,
           email,
-          image: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 1000)}?w=150`,
+          image: '',
         },
       });
     }
@@ -164,7 +168,7 @@ export async function POST(
           id: targetUser.id,
           name: targetUser.name,
           email: targetUser.email,
-          avatar: targetUser.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          avatar: '',
           role: createdMember.role as UserRole,
           joinedAt: createdMember.joinedAt.toISOString(),
         },
@@ -261,7 +265,7 @@ export async function PATCH(
         }),
         prisma.teamMember.update({
           where: { id: actorMembership.id },
-          data: { role: 'ADMIN' },
+          data: { role: 'MEMBER' },
         }),
       ]);
 
@@ -271,7 +275,7 @@ export async function PATCH(
     if (action === 'regenerate_token') {
       if (!getRolePermissions(actorRole).canRegenerateInviteToken) {
         return NextResponse.json(
-          { ok: false, error: 'Seuls OWNER et ADMIN peuvent régénérer le jeton d’invitation.' },
+          { ok: false, error: 'Seul OWNER peut régénérer le jeton d’invitation.' },
           { status: 403 }
         );
       }
@@ -288,7 +292,7 @@ export async function PATCH(
     if (action === 'update_team') {
       if (!getRolePermissions(actorRole).canManageTeamSettings) {
         return NextResponse.json(
-          { ok: false, error: 'Seuls OWNER et ADMIN peuvent modifier les paramètres de l’équipe.' },
+          { ok: false, error: 'Seul OWNER peut modifier les paramètres de l’équipe.' },
           { status: 403 }
         );
       }

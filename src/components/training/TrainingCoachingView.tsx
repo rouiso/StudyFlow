@@ -20,6 +20,7 @@ import {
   Edit3,
   Star,
   X,
+  Sparkles,
 } from 'lucide-react';
 import {
   Training,
@@ -28,11 +29,51 @@ import {
   CoachingGoal,
   SkillLevel,
   User,
+  Project,
   TrainingLevel,
   TrainingMode,
 } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
+
+type TrainingAiOperation =
+  | 'AI_GENERATE_SKILLS'
+  | 'AI_GENERATE_TRAINING'
+  | 'AI_GENERATE_COACHING';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function requestAiGeneration(
+  operation: TrainingAiOperation,
+  projectId: string,
+  prompt: string
+): Promise<unknown> {
+  const response = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      operation,
+      projectId,
+      prompt: prompt.trim(),
+      language: typeof navigator !== 'undefined' ? navigator.language : 'fr',
+    }),
+  });
+  const result: unknown = await response.json();
+  if (!response.ok || !isRecord(result) || result.ok !== true) {
+    throw new Error(
+      isRecord(result) && typeof result.error === 'string'
+        ? result.error
+        : 'La génération IA a échoué.'
+    );
+  }
+  return result.data;
+}
 
 interface TrainingCoachingViewProps {
+  onOpenAiAssistant: () => void;
+  project: Project;
   trainings: Training[];
   enrollments: TrainingEnrollment[];
   coachingSessions: CoachingSession[];
@@ -71,6 +112,8 @@ const DEFAULT_SKILLS = [
 ];
 
 export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
+  onOpenAiAssistant,
+  project,
   trainings,
   enrollments,
   coachingSessions,
@@ -111,15 +154,23 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   const [newTrainingCapacity, setNewTrainingCapacity] = useState(8);
   const [newTrainingMode, setNewTrainingMode] = useState<TrainingMode>('ONLINE');
   const [newTrainingStartsAt, setNewTrainingStartsAt] = useState('2026-11-20T14:00');
+  const [trainingAiPrompt, setTrainingAiPrompt] = useState('');
+  const [isGeneratingTraining, setIsGeneratingTraining] = useState(false);
+  const [trainingAiError, setTrainingAiError] = useState('');
+  const [trainingAiMessage, setTrainingAiMessage] = useState('');
 
   // État formulaire demande coaching
   const [coachingTopic, setCoachingTopic] = useState('');
   const [selectedCoachId, setSelectedCoachId] = useState(
-    users.find((u) => u.role === 'COACH' || u.role === 'ADMIN')?.id || users[0]?.id || ''
+    users.find((u) => u.role === 'COACH')?.id || users[0]?.id || ''
   );
   const [slot1, setSlot1] = useState('2026-11-18T10:00');
   const [coachingDuration, setCoachingDuration] = useState(45);
   const [coachingMode, setCoachingMode] = useState<TrainingMode>('ONLINE');
+  const [coachingAiPrompt, setCoachingAiPrompt] = useState('');
+  const [isGeneratingCoachingTopic, setIsGeneratingCoachingTopic] = useState(false);
+  const [coachingAiError, setCoachingAiError] = useState('');
+  const [coachingAiMessage, setCoachingAiMessage] = useState('');
 
   // État compte rendu
   const [reportShared, setReportShared] = useState('');
@@ -132,11 +183,12 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
 
   // État nouvelle compétence
   const [customSkillInput, setCustomSkillInput] = useState('');
+  const [skillAiPrompt, setSkillAiPrompt] = useState('');
+  const [generatedSkills, setGeneratedSkills] = useState<string[]>([]);
+  const [isGeneratingSkills, setIsGeneratingSkills] = useState(false);
+  const [skillAiError, setSkillAiError] = useState('');
 
-  const isCoachOrAdmin =
-    currentUser.role === 'COACH' ||
-    currentUser.role === 'ADMIN' ||
-    currentUser.role === 'OWNER';
+  const isCoachOrOwner = currentUser.role === 'COACH' || currentUser.role === 'OWNER';
 
   const allSkills = useMemo(() => {
     const set = new Set<string>(DEFAULT_SKILLS);
@@ -154,6 +206,9 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
     setNewTrainingCapacity(8);
     setNewTrainingMode('ONLINE');
     setNewTrainingStartsAt('2026-11-20T14:00');
+    setTrainingAiPrompt('');
+    setTrainingAiError('');
+    setTrainingAiMessage('');
     setShowNewTrainingModal(true);
   };
 
@@ -166,7 +221,103 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
     setNewTrainingCapacity(t.capacity);
     setNewTrainingMode(t.mode);
     setNewTrainingStartsAt(t.startsAt ? t.startsAt.slice(0, 16) : '2026-11-20T14:00');
+    setTrainingAiError('');
+    setTrainingAiMessage('');
     setShowNewTrainingModal(true);
+  };
+
+  const handleGenerateSkills = async () => {
+    if (skillAiPrompt.trim().length < 3 || isGeneratingSkills) return;
+    setIsGeneratingSkills(true);
+    setSkillAiError('');
+    setGeneratedSkills([]);
+    try {
+      const data = await requestAiGeneration('AI_GENERATE_SKILLS', project.id, skillAiPrompt);
+      if (!isRecord(data) || !Array.isArray(data.skills)) {
+        throw new Error('La réponse IA ne contient pas de compétences valides.');
+      }
+      const existing = new Set(allSkills.map((skill) => skill.normalize('NFKC').toLowerCase()));
+      const suggestions = [...new Set(
+        data.skills
+          .filter((skill): skill is string => typeof skill === 'string')
+          .map((skill) => skill.trim())
+          .filter((skill) => skill && !existing.has(skill.normalize('NFKC').toLowerCase()))
+      )].slice(0, 8);
+      if (!suggestions.length) {
+        setSkillAiError('Les compétences proposées existent déjà dans la cartographie.');
+        return;
+      }
+      setGeneratedSkills(suggestions);
+    } catch (error) {
+      setSkillAiError(error instanceof Error ? error.message : 'Erreur lors de la génération des compétences.');
+    } finally {
+      setIsGeneratingSkills(false);
+    }
+  };
+
+  const addGeneratedSkill = (skill: string) => {
+    const alreadyExists = allSkills.some(
+      (item) => item.normalize('NFKC').toLowerCase() === skill.normalize('NFKC').toLowerCase()
+    );
+    if (!alreadyExists) onAssessSkill(currentUser.id, skill, 3, true);
+    setGeneratedSkills((items) => items.filter((item) => item !== skill));
+  };
+
+  const handleGenerateTraining = async () => {
+    if (trainingAiPrompt.trim().length < 3 || isGeneratingTraining) return;
+    setIsGeneratingTraining(true);
+    setTrainingAiError('');
+    setTrainingAiMessage('');
+    try {
+      const data = await requestAiGeneration('AI_GENERATE_TRAINING', project.id, trainingAiPrompt);
+      if (!isRecord(data) || !isRecord(data.training)) {
+        throw new Error('La réponse IA ne contient pas de brouillon de formation valide.');
+      }
+      const draft = data.training;
+      if (
+        typeof draft.title !== 'string' ||
+        typeof draft.description !== 'string' ||
+        typeof draft.skill !== 'string' ||
+        !['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(String(draft.level))
+      ) {
+        throw new Error('Le brouillon de formation généré est incomplet.');
+      }
+      setNewTrainingTitle(draft.title);
+      setNewTrainingDesc(draft.description);
+      setNewTrainingSkill(draft.skill);
+      setNewTrainingLevel(draft.level as TrainingLevel);
+      setTrainingAiMessage('Brouillon généré. Vérifiez les informations avant de publier.');
+    } catch (error) {
+      setTrainingAiError(error instanceof Error ? error.message : 'Erreur lors de la génération de la formation.');
+    } finally {
+      setIsGeneratingTraining(false);
+    }
+  };
+
+  const openRequestCoaching = () => {
+    setCoachingAiPrompt('');
+    setCoachingAiError('');
+    setCoachingAiMessage('');
+    setShowRequestCoachingModal(true);
+  };
+
+  const handleGenerateCoachingTopic = async () => {
+    if (coachingAiPrompt.trim().length < 3 || isGeneratingCoachingTopic) return;
+    setIsGeneratingCoachingTopic(true);
+    setCoachingAiError('');
+    setCoachingAiMessage('');
+    try {
+      const data = await requestAiGeneration('AI_GENERATE_COACHING', project.id, coachingAiPrompt);
+      if (!isRecord(data) || typeof data.topic !== 'string' || !data.topic.trim()) {
+        throw new Error('La réponse IA ne contient pas de sujet de coaching valide.');
+      }
+      setCoachingTopic(data.topic.trim());
+      setCoachingAiMessage('Sujet généré. Vérifiez-le avant d’envoyer la demande.');
+    } catch (error) {
+      setCoachingAiError(error instanceof Error ? error.message : 'Erreur lors de la génération du sujet.');
+    } finally {
+      setIsGeneratingCoachingTopic(false);
+    }
   };
 
   return (
@@ -236,14 +387,24 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               Catalogue des formations de l&apos;équipe ({trainings.length})
             </h3>
-            {isCoachOrAdmin && (
-              <button
-                onClick={openCreateTraining}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Proposer une formation</span>
-              </button>
+            {isCoachOrOwner && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openCreateTraining}
+                  className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-600/20 px-3 py-1.5 text-xs font-semibold text-pink-200 hover:bg-pink-600/30"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Générer avec l&apos;IA
+                </button>
+                <button
+                  onClick={openCreateTraining}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Proposer une formation</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -299,7 +460,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                           </div>
                         )}
 
-                        {isCoachOrAdmin && (
+                        {isCoachOrOwner && (
                           <div className="flex items-center gap-1 ml-1">
                             {onUpdateTraining && (
                               <button
@@ -341,11 +502,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                       </div>
                       {trainer && (
                         <div className="flex items-center gap-2">
-                          <img
-                            src={trainer.avatar}
-                            alt={trainer.name}
-                            className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-700"
-                          />
+                          <UserAvatar name={trainer.name} className="w-5 h-5 text-[7px] ring-1 ring-slate-700" />
                           <span className="text-slate-400 text-[11px]">
                             Animé par{' '}
                             <strong className="text-slate-300 font-semibold">
@@ -400,10 +557,10 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                                 key={enr.id}
                                 type="button"
                                 onClick={() => {
-                                  if (isCoachOrAdmin) onToggleAttendance(enr.id);
+                                  if (isCoachOrOwner) onToggleAttendance(enr.id);
                                 }}
                                 title={
-                                  isCoachOrAdmin
+                                  isCoachOrOwner
                                     ? 'Cliquer pour valider/annuler la présence'
                                     : enr.attended
                                     ? 'Présence validée'
@@ -474,24 +631,30 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
               </p>
             </div>
 
-            <button
-              onClick={() => setShowRequestCoachingModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-semibold shadow-md transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Demander une séance</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onOpenAiAssistant}
+                className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-600/20 px-3 py-1.5 text-xs font-semibold text-pink-200 hover:bg-pink-600/30"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Assistant IA Coaching
+              </button>
+              <button
+                onClick={openRequestCoaching}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-semibold shadow-md transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Demander une séance</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
             {coachingSessions.map((s) => {
               const coach = users.find((u) => u.id === s.coachId);
               const coachee = users.find((u) => u.id === s.coacheeId);
-              const isCoachAuthor =
-                currentUser.id === s.coachId ||
-                currentUser.role === 'COACH' ||
-                currentUser.role === 'OWNER' ||
-                currentUser.role === 'ADMIN';
+              const isCoachAuthor = currentUser.id === s.coachId;
               const canDeleteSession = isCoachAuthor || currentUser.id === s.coacheeId;
 
               const statusColors: Record<string, string> = {
@@ -556,14 +719,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">Étudiant coaché :</span>
-                      <img
-                        src={
-                          coachee?.avatar ||
-                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-                        }
-                        alt={coachee?.name}
-                        className="w-5 h-5 rounded-full object-cover"
-                      />
+                      <UserAvatar name={coachee?.name || 'Étudiant'} className="w-5 h-5 text-[7px]" />
                       <span className="font-semibold text-slate-200">
                         {coachee?.name || 'Étudiant'}
                       </span>
@@ -571,14 +727,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
 
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">Coach référent :</span>
-                      <img
-                        src={
-                          coach?.avatar ||
-                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-                        }
-                        alt={coach?.name}
-                        className="w-5 h-5 rounded-full object-cover"
-                      />
+                      <UserAvatar name={coach?.name || 'Coach'} className="w-5 h-5 text-[7px]" />
                       <span className="font-semibold text-indigo-300">
                         {coach?.name || 'Coach'}
                       </span>
@@ -619,14 +768,14 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   {s.privateNotes && (
                     <div
                       className={`p-3 rounded-xl border text-xs space-y-1 ${
-                        currentUser.id === s.coachId || currentUser.role === 'COACH'
+                        currentUser.id === s.coachId
                           ? 'bg-amber-950/20 border-amber-500/30 text-amber-200'
                           : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 font-bold">
-                          {currentUser.id === s.coachId || currentUser.role === 'COACH' ? (
+                          {currentUser.id === s.coachId ? (
                             <>
                               <Unlock className="w-3.5 h-3.5 text-amber-400" />
                               <span className="text-amber-300">
@@ -644,7 +793,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                         </div>
                       </div>
 
-                      {currentUser.id === s.coachId || currentUser.role === 'COACH' ? (
+                      {currentUser.id === s.coachId ? (
                         <p className="text-amber-200/90 leading-relaxed pl-5 italic font-mono text-[11px]">
                           {s.privateNotes}
                         </p>
@@ -809,7 +958,62 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   Cliquez sur les étoiles pour évaluer (Auto-évaluation & Évaluation Coach §7.1).
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={handleGenerateSkills}
+                disabled={isGeneratingSkills || skillAiPrompt.trim().length < 3}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-600/20 px-3 py-1.5 text-xs font-semibold text-pink-200 hover:bg-pink-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGeneratingSkills
+                  ? <Clock className="h-3.5 w-3.5 animate-spin" />
+                  : <Sparkles className="h-3.5 w-3.5" />}
+                Générer des compétences
+              </button>
             </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] text-slate-400">
+                Décrivez les compétences utiles à votre projet :
+              </label>
+              <textarea
+                rows={2}
+                value={skillAiPrompt}
+                onChange={(event) => setSkillAiPrompt(event.target.value)}
+                maxLength={1200}
+                placeholder="Ex. Proposer des compétences à acquérir pour concevoir une application mobile accessible."
+                className="w-full resize-y rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              {skillAiError && <p role="alert" className="text-xs text-rose-300">{skillAiError}</p>}
+            </div>
+
+            {generatedSkills.length > 0 && (
+              <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-300">
+                    Suggestions IA — niveau initial neutre de 3/5, ajustable après ajout.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => generatedSkills.forEach(addGeneratedSkill)}
+                    className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200"
+                  >
+                    Ajouter toutes
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {generatedSkills.map((skill) => (
+                    <button
+                      key={skill}
+                      type="button"
+                      onClick={() => addGeneratedSkill(skill)}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200 hover:border-indigo-500/50 hover:text-white"
+                    >
+                      + {skill}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Ajout d'une nouvelle compétence à évaluer */}
             <div className="flex items-center gap-2">
@@ -905,12 +1109,12 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                             <button
                               key={lvl}
                               type="button"
-                              disabled={!isCoachOrAdmin}
+                              disabled={!isCoachOrOwner}
                               onClick={() =>
                                 onAssessSkill(currentUser.id, skill, lvl, false)
                               }
                               title={
-                                isCoachOrAdmin
+                                isCoachOrOwner
                                   ? `Évaluation Coach ${skill} : ${lvl}/5`
                                   : 'Réservé au Coach / Admin'
                               }
@@ -918,7 +1122,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                                 lvl <= coachAssessment
                                   ? 'text-purple-400'
                                   : 'text-slate-700 hover:text-purple-300'
-                              } ${!isCoachOrAdmin ? 'cursor-not-allowed opacity-70' : ''}`}
+                              } ${!isCoachOrOwner ? 'cursor-not-allowed opacity-70' : ''}`}
                             >
                               <Star className="w-3 h-3 fill-current" />
                             </button>
@@ -939,7 +1143,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
       {/* ======================================================== */}
       {showNewTrainingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-indigo-400" />
@@ -956,6 +1160,35 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {!editingTraining && (
+              <div className="rounded-xl border border-pink-500/20 bg-pink-950/15 p-3 space-y-2">
+                <label className="block text-[11px] font-semibold text-pink-200">
+                  Décrivez le thème de la formation à générer :
+                </label>
+                <textarea
+                  rows={2}
+                  value={trainingAiPrompt}
+                  onChange={(event) => setTrainingAiPrompt(event.target.value)}
+                  maxLength={1200}
+                  placeholder="Ex. Créer une formation pratique sur React pour construire des interfaces accessibles."
+                  className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateTraining}
+                  disabled={isGeneratingTraining || trainingAiPrompt.trim().length < 3}
+                  className="flex items-center gap-1.5 rounded-lg bg-pink-600/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isGeneratingTraining
+                    ? <Clock className="h-3.5 w-3.5 animate-spin" />
+                    : <Sparkles className="h-3.5 w-3.5" />}
+                  Générer le brouillon
+                </button>
+                {trainingAiError && <p role="alert" className="text-xs text-rose-300">{trainingAiError}</p>}
+                {trainingAiMessage && <p role="status" className="text-xs text-emerald-300">{trainingAiMessage}</p>}
+              </div>
+            )}
 
             <div className="space-y-3 text-xs">
               <div>
@@ -1175,11 +1408,38 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
       {/* ======================================================== */}
       {showRequestCoachingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl glass-panel bg-slate-900 border border-slate-700 shadow-2xl p-5 space-y-4">
             <h3 className="font-bold text-sm text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-400" />
               <span>Demander une Séance de Coaching</span>
             </h3>
+
+            <div className="rounded-xl border border-pink-500/20 bg-pink-950/15 p-3 space-y-2">
+              <label className="block text-[11px] font-semibold text-pink-200">
+                Décrivez votre besoin; l&apos;IA proposera un sujet de séance :
+              </label>
+              <textarea
+                rows={2}
+                value={coachingAiPrompt}
+                onChange={(event) => setCoachingAiPrompt(event.target.value)}
+                maxLength={1200}
+                placeholder="Ex. Je veux améliorer ma prise de parole pour la présentation finale du projet."
+                className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+              />
+              <button
+                type="button"
+                onClick={handleGenerateCoachingTopic}
+                disabled={isGeneratingCoachingTopic || coachingAiPrompt.trim().length < 3}
+                className="flex items-center gap-1.5 rounded-lg bg-pink-600/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGeneratingCoachingTopic
+                  ? <Clock className="h-3.5 w-3.5 animate-spin" />
+                  : <Sparkles className="h-3.5 w-3.5" />}
+                Générer le sujet
+              </button>
+              {coachingAiError && <p role="alert" className="text-xs text-rose-300">{coachingAiError}</p>}
+              {coachingAiMessage && <p role="status" className="text-xs text-emerald-300">{coachingAiMessage}</p>}
+            </div>
 
             <div className="space-y-3 text-xs">
               <div>
@@ -1207,7 +1467,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
                   {users
                     .filter(
                       (u) =>
-                        u.role === 'COACH' || u.role === 'ADMIN' || u.role === 'OWNER'
+                        u.role === 'COACH' || u.role === 'OWNER'
                     )
                     .map((coach) => (
                       <option key={coach.id} value={coach.id}>

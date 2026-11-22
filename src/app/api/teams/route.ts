@@ -5,8 +5,14 @@ import { generateInviteToken, slugifyTeamName } from '@/lib/user-management';
 export async function GET(req: NextRequest) {
   try {
     const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
+    const memberships = await prisma.teamMember.findMany({ where: { userId: sessionUserId } });
+    const teamIds = memberships.map((membership: any) => membership.teamId);
 
     const allTeams = await prisma.team.findMany({
+      where: { id: { in: teamIds } },
       include: {
         members: {
           include: { user: true },
@@ -48,7 +54,7 @@ export async function GET(req: NextRequest) {
             id: m.user.id,
             name: m.user.name,
             email: m.user.email,
-            avatar: m.user.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            avatar: '',
             role: m.role,
             joinedAt: toIso(m.joinedAt || m.createdAt),
           },

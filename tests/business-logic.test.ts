@@ -73,8 +73,8 @@ describe('StudyFlow v1.1 — Tests Métiers (Cahier des Charges v1.1 & Soutenanc
 
   // Test 5 (M1 - v1.1) : Permissions du rôle COACH (ne peut pas déplacer de cartes, peut gérer formations)
   it('M1 : Le rôle COACH ne doit pas pouvoir déplacer ou modifier de tâches (§4.2 & §8)', () => {
-    const canMoveTask = (role: string) => ['OWNER', 'ADMIN', 'MEMBER'].includes(role);
-    const canCreateTraining = (role: string) => ['OWNER', 'ADMIN', 'COACH'].includes(role);
+    const canMoveTask = (role: string) => ['OWNER', 'MEMBER'].includes(role);
+    const canCreateTraining = (role: string) => ['OWNER', 'COACH'].includes(role);
 
     assert.strictEqual(canMoveTask('COACH'), false, 'Un Coach ne peut pas modifier ou déplacer de tâche');
     assert.strictEqual(canMoveTask('MEMBER'), true, 'Un Membre peut déplacer des tâches');

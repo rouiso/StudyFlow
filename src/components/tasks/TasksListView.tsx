@@ -13,6 +13,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { Task, Subtask, Column, User, Label, TaskPriority } from '@/types';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface TasksListViewProps {
   tasks: Task[];
@@ -41,7 +42,7 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyMyTasks, setOnlyMyTasks] = useState(false);
 
-  const isCoachOrViewer = currentUser?.role === 'COACH' || currentUser?.role === 'VIEWER';
+  const isCoach = currentUser?.role === 'COACH';
 
   const filtered = tasks.filter((t) => {
     if (filterColumn !== 'ALL' && t.columnId !== filterColumn) return false;
@@ -101,7 +102,7 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
             ))}
           </select>
 
-          {!isCoachOrViewer && (
+          {!isCoach && (
             <button
               onClick={() => onOpenTaskModal(null)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30"
@@ -190,12 +191,10 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                   <div className="flex items-center gap-2">
                     <div className="flex items-center -space-x-1.5">
                       {assignedUsers.map((u) => (
-                        <img
+                        <UserAvatar
                           key={u.id}
-                          src={u.avatar}
-                          alt={u.name}
-                          title={u.name}
-                          className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-900"
+                          name={u.name}
+                          className="w-6 h-6 text-[8px] ring-1 ring-slate-900"
                         />
                       ))}
                     </div>

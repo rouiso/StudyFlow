@@ -11,11 +11,17 @@ import {
   ChevronRight,
   Trash2,
   Edit3,
+  Sparkles,
+  Download,
+  Mail,
+  LoaderCircle,
+  X,
 } from 'lucide-react';
 import { Task, Milestone, Column, User, Training, CoachingSession } from '@/types';
 
 interface CalendarViewProps {
   projectId?: string;
+  canGenerateAi: boolean;
   tasks: Task[];
   milestones: Milestone[];
   columns: Column[];
@@ -24,21 +30,22 @@ interface CalendarViewProps {
   coachingSessions?: CoachingSession[];
   currentUserId?: string;
   onOpenTaskModal: (task: Task) => void;
-  onAddMilestone: (milestone: Omit<Milestone, 'id'>) => void;
-  onUpdateMilestone?: (milestoneId: string, updates: Partial<Omit<Milestone, 'id'>>) => void;
-  onToggleMilestone: (milestoneId: string) => void;
-  onDeleteMilestone: (milestoneId: string) => void;
+  onAddMilestones: (milestones: Omit<Milestone, 'id'>[]) => Promise<void>;
+  onUpdateMilestone?: (milestoneId: string, updates: Partial<Omit<Milestone, 'id'>>) => void | Promise<void>;
+  onToggleMilestone: (milestoneId: string) => void | Promise<void>;
+  onDeleteMilestone: (milestoneId: string) => void | Promise<void>;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
   projectId = 'proj-1',
+  canGenerateAi,
   tasks,
   milestones,
   trainings = [],
   coachingSessions = [],
   currentUserId,
   onOpenTaskModal,
-  onAddMilestone,
+  onAddMilestones,
   onUpdateMilestone,
   onToggleMilestone,
   onDeleteMilestone,
@@ -51,6 +58,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     new Date().toISOString().split('T')[0]
   );
   const [newMilestoneDesc, setNewMilestoneDesc] = useState('');
+  const [showAiEventModal, setShowAiEventModal] = useState(false);
+  const [aiSourceText, setAiSourceText] = useState('');
+  const [extractedEvents, setExtractedEvents] = useState<{ title: string; date: string; description: string }[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isSendingWeeklySummary, setIsSendingWeeklySummary] = useState(false);
+  const [isSavingEvents, setIsSavingEvents] = useState(false);
+  const [isSavingMilestone, setIsSavingMilestone] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [milestoneError, setMilestoneError] = useState('');
+  const [calendarMessage, setCalendarMessage] = useState('');
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -98,30 +116,166 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setShowAddMilestoneModal(true);
   };
 
-  const handleSaveMilestone = (e: React.FormEvent) => {
+  const handleSaveMilestone = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMilestoneTitle.trim()) return;
 
-    if (editingMilestone && onUpdateMilestone) {
-      onUpdateMilestone(editingMilestone.id, {
-        title: newMilestoneTitle.trim(),
-        date: newMilestoneDate,
-        description: newMilestoneDesc.trim(),
-      });
-    } else {
-      onAddMilestone({
-        projectId,
-        title: newMilestoneTitle.trim(),
-        date: newMilestoneDate,
-        description: newMilestoneDesc.trim(),
-        completed: false,
-      });
-    }
+    setIsSavingMilestone(true);
+    setAiError('');
+    try {
+      if (editingMilestone && onUpdateMilestone) {
+        await onUpdateMilestone(editingMilestone.id, {
+          title: newMilestoneTitle.trim(),
+          date: newMilestoneDate,
+          description: newMilestoneDesc.trim(),
+        });
+      } else {
+        await onAddMilestones([{
+          projectId,
+          title: newMilestoneTitle.trim(),
+          date: newMilestoneDate,
+          description: newMilestoneDesc.trim(),
+          completed: false,
+        }]);
+      }
 
-    setEditingMilestone(null);
-    setNewMilestoneTitle('');
-    setNewMilestoneDesc('');
-    setShowAddMilestoneModal(false);
+      setEditingMilestone(null);
+      setNewMilestoneTitle('');
+      setNewMilestoneDesc('');
+      setShowAddMilestoneModal(false);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Impossible d’enregistrer le jalon.');
+    } finally {
+      setIsSavingMilestone(false);
+    }
+  };
+
+  const runMilestoneAction = async (action: () => void | Promise<void>) => {
+    setMilestoneError('');
+    try {
+      await action();
+    } catch (error) {
+      setMilestoneError(error instanceof Error ? error.message : 'Impossible de modifier le jalon.');
+    }
+  };
+
+  const handleExtractEvents = async () => {
+    if (!canGenerateAi || aiSourceText.trim().length < 20 || isExtracting) return;
+    setIsExtracting(true);
+    setAiError('');
+    setCalendarMessage('');
+    setExtractedEvents([]);
+    try {
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          operation: 'AI_EXTRACT_CALENDAR_EVENTS',
+          projectId,
+          text: aiSourceText.trim(),
+          language: typeof navigator !== 'undefined' ? navigator.language : 'fr',
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Impossible d’extraire les événements.');
+      }
+      if (!Array.isArray(result.data?.events)) {
+        throw new Error('La réponse IA ne contient pas de liste d’événements valide.');
+      }
+      setExtractedEvents(result.data.events);
+      if (!result.data.events.length) setCalendarMessage('Aucun événement avec une date explicite n’a été trouvé.');
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Erreur lors de l’extraction IA.');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleAddExtractedEvents = async () => {
+    if (!extractedEvents.length || isSavingEvents) return;
+    setAiError('');
+    setIsSavingEvents(true);
+    try {
+      await onAddMilestones(extractedEvents.map((event) => ({
+        projectId,
+        title: event.title,
+        date: event.date,
+        description: event.description,
+        completed: false,
+      })));
+      setCalendarMessage(`${extractedEvents.length} événement(s) ajouté(s) au calendrier.`);
+      setExtractedEvents([]);
+      setAiSourceText('');
+      setShowAiEventModal(false);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Impossible d’ajouter les événements.');
+    } finally {
+      setIsSavingEvents(false);
+    }
+  };
+
+  const handleExportCalendar = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setAiError('');
+    try {
+      const response = await fetch(`/api/calendar/export?projectId=${encodeURIComponent(projectId)}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || 'Impossible d’exporter le calendrier.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'studyflow-calendar.ics';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Erreur lors de l’export calendrier.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSendWeeklySummary = async () => {
+    if (isSendingWeeklySummary) return;
+    setIsSendingWeeklySummary(true);
+    setAiError('');
+    setCalendarMessage('');
+    try {
+      const response = await fetch('/api/calendar/weekly-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ projectId }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Impossible d’envoyer le résumé hebdomadaire.');
+      }
+
+      if (result.data?.status === 'sent') {
+        setCalendarMessage(
+          result.data.alreadySent
+            ? 'Le résumé hebdomadaire a déjà été envoyé cette semaine.'
+            : 'Le résumé hebdomadaire a été envoyé par e-mail.'
+        );
+      } else if (result.data?.status === 'retrying') {
+        setAiError(
+          `Échec de l’envoi SMTP (${result.data.error || 'erreur inconnue'}). Le résumé reste en attente; le scheduler devra réessayer après correction de la connexion.`
+        );
+      } else {
+        setCalendarMessage('Le résumé est en attente dans la file d’envoi.');
+      }
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Erreur lors de l’envoi du résumé hebdomadaire.');
+    } finally {
+      setIsSendingWeeklySummary(false);
+    }
   };
 
   const getEventsForDay = (day: number) => {
@@ -152,7 +306,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAiError('');
+              setCalendarMessage('');
+              setShowAiEventModal(true);
+            }}
+            disabled={!canGenerateAi}
+            className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-600/20 px-3 py-1.5 text-xs font-bold text-pink-200 hover:bg-pink-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Extraire avec l’IA</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCalendar}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+          >
+            {isExporting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Exporter .ics</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSendWeeklySummary}
+            disabled={isSendingWeeklySummary}
+            aria-label="Envoyer le résumé hebdomadaire"
+            title="Envoyer le résumé hebdomadaire par e-mail"
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-600/15 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-600/25 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSendingWeeklySummary
+              ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              : <Mail className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Résumé hebdomadaire</span>
+          </button>
           <button
             onClick={openCreateModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all"
@@ -176,6 +365,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
         </div>
+        {aiError && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300">{aiError}</p>}
+        {calendarMessage && <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-3 text-xs text-emerald-300">{calendarMessage}</p>}
+        {milestoneError && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300">{milestoneError}</p>}
       </div>
 
       {/* Grille Calendrier */}
@@ -325,7 +517,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => onToggleMilestone(m.id)}
+                    onClick={() => void runMilestoneAction(() => onToggleMilestone(m.id))}
                     className={`p-1 rounded-lg ${
                       m.completed ? 'text-emerald-400' : 'text-slate-500 hover:text-purple-400'
                     }`}
@@ -351,7 +543,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </button>
                   )}
                   <button
-                    onClick={() => onDeleteMilestone(m.id)}
+                    onClick={() => void runMilestoneAction(() => onDeleteMilestone(m.id))}
                     className="text-slate-500 hover:text-rose-400 p-1"
                     title="Supprimer ce jalon"
                   >
@@ -384,6 +576,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <h3 className="font-bold text-sm text-white mb-3">
               {editingMilestone ? 'Modifier le Jalon' : 'Ajouter un Jalon Clé'}
             </h3>
+            {aiError && <p role="alert" className="mb-3 text-xs text-rose-300">{aiError}</p>}
             <form onSubmit={handleSaveMilestone} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -438,13 +631,116 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold"
+                  disabled={isSavingMilestone}
+                  className="px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold disabled:opacity-50"
                 >
-                  {editingMilestone ? 'Enregistrer' : 'Ajouter Jalon'}
+                  {isSavingMilestone ? 'Enregistrement…' : editingMilestone ? 'Enregistrer' : 'Ajouter Jalon'}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {showAiEventModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-calendar-title"
+            className="glass-panel max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-pink-500/30 bg-slate-900 p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="ai-calendar-title" className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Sparkles className="h-4 w-4 text-pink-400" />
+                  Extraire des événements avec l’IA
+                </h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Collez un texte contenant des dates. Vérifiez les propositions avant de les ajouter.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiEventModal(false)}
+                aria-label="Fermer l’extraction IA"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <textarea
+              value={aiSourceText}
+              onChange={(event) => setAiSourceText(event.target.value)}
+              maxLength={10000}
+              rows={6}
+              placeholder="Ex : Réunion de lancement le 12 décembre 2026 à 10 h. Remise du rapport le 18 décembre 2026."
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-pink-400 focus:outline-none"
+            />
+
+            {aiError && <p role="alert" className="text-xs text-rose-300">{aiError}</p>}
+            {calendarMessage && <p role="status" className="text-xs text-emerald-300">{calendarMessage}</p>}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAiEventModal(false)}
+                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleExtractEvents}
+                disabled={!canGenerateAi || aiSourceText.trim().length < 20 || isExtracting}
+                className="flex items-center gap-2 rounded-xl bg-pink-600 px-4 py-2 text-xs font-bold text-white hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isExtracting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {isExtracting ? 'Extraction…' : 'Extraire les événements'}
+              </button>
+            </div>
+
+            {extractedEvents.length > 0 && (
+              <div className="space-y-3 border-t border-slate-800 pt-4">
+                <p className="text-xs font-semibold text-slate-200">
+                  {extractedEvents.length} événement(s) à vérifier
+                </p>
+                <div className="max-h-64 space-y-2 overflow-y-auto">
+                  {extractedEvents.map((event, index) => (
+                    <article
+                      key={`${event.date}-${event.title}-${index}`}
+                      className="flex items-start justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3"
+                    >
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-white">{event.title}</h4>
+                        <p className="mt-0.5 text-xs text-pink-300">{event.date}</p>
+                        {event.description && <p className="mt-1 text-xs text-slate-400">{event.description}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExtractedEvents((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        aria-label={`Retirer ${event.title}`}
+                        className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-rose-950/40 hover:text-rose-300"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </article>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAddExtractedEvents}
+                    disabled={isSavingEvents}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {isSavingEvents ? 'Ajout en cours…' : `Ajouter ${extractedEvents.length} événement(s)`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>

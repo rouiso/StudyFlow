@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { canDeleteFile } from '@/lib/file-manager';
+import { UserRole } from '@/types';
 import fs from 'fs';
 import path from 'path';
 
@@ -45,7 +47,7 @@ function buildSeedContent(name: string, mimeType: string): { buffer: Buffer; con
     `1. RÉSUMÉ EXÉCUTIF`,
     `Plateforme collaborative de gestion de projets étudiants (M1 à M7) avec`,
     `fonctionnement PWA Offline-First, Kanban temps réel, gestion des rôles RBAC`,
-    `(OWNER, ADMIN, COACH, MEMBER, VIEWER) et partage documentaire versionné.`,
+    `(OWNER, MEMBER, COACH) et partage documentaire versionné.`,
     ``,
     `2. ARCHITECTURE & SÉCURITÉ`,
     `- Authentification par session HTTP-Only et contrôle RBAC granulaire`,
@@ -68,6 +70,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const userId = req.cookies.get('studyflow_session')?.value;
+    if (!userId) return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
     const inline = req.nextUrl.searchParams.get('inline') === '1';
     const requestedVersion = req.nextUrl.searchParams.get('version');
 
@@ -77,6 +81,10 @@ export async function GET(
     });
 
     if (!fileRecord) {
+      const memberships = await prisma.teamMember.findMany({ where: { userId }, take: 1 });
+      if (!memberships.length) {
+        return NextResponse.json({ ok: false, error: 'Accès refusé.' }, { status: 403 });
+      }
       const fallbackName = req.nextUrl.searchParams.get('name') || `${id}.txt`;
       const fallbackMime = req.nextUrl.searchParams.get('mime') || 'text/plain';
       const { buffer, contentType } = buildSeedContent(fallbackName, fallbackMime);
@@ -89,6 +97,14 @@ export async function GET(
         },
       });
     }
+
+    const project = await prisma.project.findUnique({ where: { id: fileRecord.projectId } });
+    const membership = project
+      ? await prisma.teamMember.findUnique({
+          where: { teamId_userId: { teamId: project.teamId, userId } },
+        })
+      : null;
+    if (!membership) return NextResponse.json({ ok: false, error: 'Accès refusé au fichier.' }, { status: 403 });
 
     const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
     const chosenVersion = requestedVersion
@@ -123,11 +139,13 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const userId = req.cookies.get('studyflow_session')?.value;
+    if (!userId) return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
 
     const existing = await prisma.file.findUnique({
       where: { id },
@@ -136,6 +154,16 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json({ ok: true, deletedId: id });
+    }
+
+    const project = await prisma.project.findUnique({ where: { id: existing.projectId } });
+    const membership = project
+      ? await prisma.teamMember.findUnique({
+          where: { teamId_userId: { teamId: project.teamId, userId } },
+        })
+      : null;
+    if (!membership || !canDeleteFile(existing, userId, membership.role as UserRole)) {
+      return NextResponse.json({ ok: false, error: 'Vous ne pouvez pas supprimer ce fichier.' }, { status: 403 });
     }
 
     const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');

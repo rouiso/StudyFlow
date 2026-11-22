@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { usePwa } from '../pwa/PwaProvider';
 import { User, Project, AppNotification, Team } from '@/types';
-import { getRolePermissions, ROLE_METADATA } from '@/lib/user-management';
+import { getRolePermissions } from '@/lib/user-management';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface HeaderProps {
   currentTeam?: Team;
@@ -55,7 +56,6 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = notifications.filter((n) => !n.readAt).length;
   const perms = getRolePermissions(currentUser.role);
-  const roleMeta = ROLE_METADATA[currentUser.role] || ROLE_METADATA.MEMBER;
 
   return (
     <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 px-3 py-2.5 sm:px-6">
@@ -164,16 +164,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {onOpenTeamModal && (
-            <button
-              onClick={onOpenTeamModal}
-              title="Gérer les utilisateurs, les rôles (Owner, Admin, Coach, Member) et les invitations"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-xs font-medium text-slate-200 border border-slate-700/60 transition-colors"
-            >
-              <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="hidden sm:inline">Équipe & Rôles</span>
-            </button>
-          )}
         </div>
 
         {/* Actions à droite */}
@@ -260,16 +250,9 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/70 transition-colors"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-6 h-6 rounded-full object-cover ring-1 ring-indigo-400"
-              />
+              <UserAvatar name={currentUser.name} className="w-6 h-6 text-[8px] ring-1 ring-indigo-400" />
               <span className="text-xs font-semibold text-slate-200 max-w-[80px] sm:max-w-[110px] truncate hidden xs:inline">
                 {currentUser.name}
-              </span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${roleMeta.badgeClass}`}>
-                {currentUser.role}
               </span>
             </button>
 

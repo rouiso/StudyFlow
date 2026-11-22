@@ -5,11 +5,23 @@ import { assertPermission, getCurrentUser } from '@/lib/permissions';
 // GET /api/tasks?projectId=proj-1
 export async function GET(req: NextRequest) {
   try {
+    const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get('projectId') || undefined;
+    const memberships = await prisma.teamMember.findMany({ where: { userId: sessionUserId } });
+    const teamIds = memberships.map((membership: any) => membership.teamId);
+    const projects = await prisma.project.findMany({
+      where: { teamId: { in: teamIds } },
+      select: { id: true },
+    });
+    const projectIds = projects.map((project: any) => project.id);
+    if (projectId && !projectIds.includes(projectId)) {
+      return NextResponse.json({ ok: false, error: 'Accès refusé à ce projet.' }, { status: 403 });
+    }
 
     const tasks = await prisma.task.findMany({
-      where: projectId ? { projectId } : undefined,
+      where: projectId ? { projectId } : { projectId: { in: projectIds } },
       include: {
         subtasks: { orderBy: { position: 'asc' } },
         assignees: { include: { user: true } },
@@ -32,6 +44,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
     const body = await req.json();
     const { projectId, columnId, title, description, priority, dueDate, assigneeIds, subtasks } = body;
 
@@ -43,6 +58,13 @@ export async function POST(req: NextRequest) {
     }
 
     await assertPermission('create_task', { projectId, userId: sessionUserId });
+    const column = await prisma.column.findUnique({ where: { id: columnId } });
+    if (!column || column.projectId !== projectId) {
+      return NextResponse.json(
+        { ok: false, error: { code: 'INVALID_COLUMN', message: 'La colonne n’appartient pas à ce projet.' } },
+        { status: 400 }
+      );
+    }
 
     const currentUser = await getCurrentUser();
     const createdById = sessionUserId || currentUser?.id || 'user-1';
@@ -103,6 +125,9 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
     const body = await req.json();
     const { id, columnId, title, description, priority, dueDate } = body;
 
@@ -124,6 +149,12 @@ export async function PUT(req: NextRequest) {
     await assertPermission('update_task', { projectId: existing.projectId, userId: sessionUserId });
 
     const column = columnId ? await prisma.column.findUnique({ where: { id: columnId } }) : null;
+    if (columnId && (!column || column.projectId !== existing.projectId)) {
+      return NextResponse.json(
+        { ok: false, error: { code: 'INVALID_COLUMN', message: 'La colonne n’appartient pas à ce projet.' } },
+        { status: 400 }
+      );
+    }
 
     const task = await prisma.task.update({
       where: { id },
@@ -150,6 +181,9 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const sessionUserId = req.cookies.get('studyflow_session')?.value;
+    if (!sessionUserId) {
+      return NextResponse.json({ ok: false, error: 'Authentification requise.' }, { status: 401 });
+    }
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 

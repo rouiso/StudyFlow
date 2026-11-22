@@ -7,11 +7,11 @@ import {
   Calendar,
   MessageSquare,
   BarChart3,
-  Sparkles,
   GraduationCap,
+  type LucideIcon,
 } from 'lucide-react';
 
-export type ActiveTab = 'kanban' | 'tasks' | 'calendar' | 'stats' | 'chat' | 'coaching' | 'ai';
+export type ActiveTab = 'kanban' | 'tasks' | 'calendar' | 'stats' | 'chat' | 'coaching';
 
 interface MobileBottomNavProps {
   activeTab: ActiveTab;
@@ -24,14 +24,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onTabChange,
   unreadMessagesCount = 0,
 }) => {
-  const tabs = [
+  const tabs: { id: ActiveTab; label: string; icon: LucideIcon; badge?: number }[] = [
     { id: 'kanban' as ActiveTab, label: 'Kanban', icon: Kanban },
     { id: 'tasks' as ActiveTab, label: 'Tâches', icon: CheckSquare },
     { id: 'calendar' as ActiveTab, label: 'Calendrier', icon: Calendar },
     { id: 'stats' as ActiveTab, label: 'Stats M4', icon: BarChart3 },
     { id: 'chat' as ActiveTab, label: 'Échanges', icon: MessageSquare, badge: unreadMessagesCount },
     { id: 'coaching' as ActiveTab, label: 'Coaching', icon: GraduationCap },
-    { id: 'ai' as ActiveTab, label: 'IA Copilot', icon: Sparkles, highlight: true },
   ];
 
   return (
@@ -47,16 +46,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               onClick={() => onTabChange(tab.id)}
               className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all duration-200 select-none ${
                 isActive
-                  ? tab.highlight
-                    ? 'text-pink-400 font-bold scale-105'
-                    : 'text-indigo-400 font-bold scale-105'
+                  ? 'text-indigo-400 font-bold scale-105'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <div className="relative">
                 <Icon
                   className={`w-5 h-5 transition-transform ${
-                    isActive ? (tab.highlight ? 'text-pink-400' : 'text-indigo-400') : ''
+                    isActive ? 'text-indigo-400' : ''
                   }`}
                 />
                 {tab.badge && tab.badge > 0 ? (
@@ -72,9 +69,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
               {isActive && (
                 <span
-                  className={`absolute -bottom-1 w-6 h-0.5 rounded-full ${
-                    tab.highlight ? 'bg-pink-400' : 'bg-indigo-500'
-                  }`}
+                  className="absolute -bottom-1 w-6 h-0.5 rounded-full bg-indigo-500"
                 />
               )}
             </button>

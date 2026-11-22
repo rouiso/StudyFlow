@@ -129,6 +129,22 @@ async function collection(model: string): Promise<Collection<Document>> {
   return (await getDb()).collection(collectionName(model));
 }
 
+export async function ensureMongoIndex(
+  model: string,
+  keys: Record<string, 1 | -1>,
+  options: { unique?: boolean; partialFilterExpression?: Record<string, unknown> }
+) {
+  await (await collection(model)).createIndex(keys, options);
+}
+
+async function findPublicUser(where: Record<string, any>, options?: any) {
+  const user = await findUnique('user', where, options);
+  if (!user) return user;
+  const publicUser = { ...user };
+  delete publicUser.passwordHash;
+  return publicUser;
+}
+
 async function hydrate(document: Document, model: string, include?: Record<string, any>): Promise<Document> {
   if (!document || !include) return document;
   const result = { ...document };
@@ -153,13 +169,13 @@ async function hydrate(document: Document, model: string, include?: Record<strin
     else if (key === 'team') result.team = await findUnique('team', { id: document.teamId }, nested);
     else if (key === 'project') result.project = await findUnique('project', { id: document.projectId }, nested);
     else if (key === 'column') result.column = await findUnique('column', { id: document.columnId }, nested);
-    else if (key === 'creator') result.creator = await findUnique('user', { id: document.createdById }, nested);
-    else if (key === 'trainer') result.trainer = await findUnique('user', { id: document.trainerId }, nested);
-    else if (key === 'coach') result.coach = await findUnique('user', { id: document.coachId }, nested);
-    else if (key === 'coachee') result.coachee = await findUnique('user', { id: document.coacheeId }, nested);
-    else if (key === 'uploader') result.uploader = await findUnique('user', { id: document.uploaderId }, nested);
-    else if (key === 'author') result.author = await findUnique('user', { id: document.authorId }, nested);
-    else if (key === 'user') result.user = await findUnique('user', { id: document.userId }, nested);
+    else if (key === 'creator') result.creator = await findPublicUser({ id: document.createdById }, nested);
+    else if (key === 'trainer') result.trainer = await findPublicUser({ id: document.trainerId }, nested);
+    else if (key === 'coach') result.coach = await findPublicUser({ id: document.coachId }, nested);
+    else if (key === 'coachee') result.coachee = await findPublicUser({ id: document.coacheeId }, nested);
+    else if (key === 'uploader') result.uploader = await findPublicUser({ id: document.uploaderId }, nested);
+    else if (key === 'author') result.author = await findPublicUser({ id: document.authorId }, nested);
+    else if (key === 'user') result.user = await findPublicUser({ id: document.userId }, nested);
     else if (key === 'label') result.label = await findUnique('label', { id: document.labelId }, nested);
   }
   return result;
@@ -361,7 +377,7 @@ const modelNames = [
   'label', 'taskAssignee', 'taskLabel', 'milestone', 'reminder', 'calendarToken', 'activity',
   'projectSnapshot', 'report', 'channel', 'message', 'notification', 'file', 'folder',
   'fileVersion', 'training', 'trainingEnrollment', 'trainingResource', 'coachingSession',
-  'coachingGoal', 'skillLevel', 'feedback',
+  'coachingGoal', 'skillLevel', 'feedback', 'emailQueue',
 ];
 
 export const mongo = Object.fromEntries(modelNames.map((model) => [model, delegate(model)])) as MongoApi;

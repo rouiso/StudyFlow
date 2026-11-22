@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { hashPassword } from '@/lib/password';
 import { generateInviteToken, slugifyTeamName } from '@/lib/user-management';
 
 export async function POST(req: NextRequest) {
@@ -7,16 +8,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, email, password, teamAction, inviteToken, teamName, teamDescription } = body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return NextResponse.json(
         { ok: false, error: 'Tous les champs sont obligatoires.' },
         { status: 400 }
       );
     }
 
-    if (password.length < 8) {
+    if (password.length < 8 || password.length > 128) {
       return NextResponse.json(
-        { ok: false, error: 'Le mot de passe doit contenir au moins 8 caractères.' },
+        { ok: false, error: 'Le mot de passe doit contenir entre 8 et 128 caractères.' },
         { status: 400 }
       );
     }
@@ -40,7 +48,8 @@ export async function POST(req: NextRequest) {
       data: {
         name: name.trim(),
         email: normalizedEmail,
-        image: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 1000)}?w=150`,
+        image: '',
+        passwordHash: hashPassword(password),
       },
     });
 

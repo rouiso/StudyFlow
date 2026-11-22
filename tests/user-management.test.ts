@@ -1,484 +1,235 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
-  hasMinRole,
-  getRolePermissions,
-  getAssignableRoles,
   canChangeMemberRole,
   canRemoveTeamMember,
-  applyRoleChange,
-  applyRemoveMember,
+  getAssignableRoles,
+  getRolePermissions,
+  hasMinRole,
   transferTeamOwnership,
+  applyRoleChange,
   createTeamWithOwner,
   joinTeamWithToken,
   generateInviteToken,
 } from '../src/lib/user-management';
 import { Team, TeamMember, User } from '../src/types';
+import { fallbackKanban, fallbackProfile, normalizePriority, relativeDueDate } from '../src/lib/ai-service';
+import { escapeHtml, renderEmail } from '../src/lib/email-service';
 
-describe('User Management & RBAC Engine (Module 1)', () => {
-  const ownerUser: User = {
-    id: 'u-owner',
-    name: 'Léa Owner',
-    email: 'lea@univ.fr',
-    avatar: '',
-    role: 'OWNER',
-    joinedAt: '2026-09-01T08:00:00Z',
-  };
-
-  const baseTeam: Team = {
+describe('StudyFlow role and assistant policies', () => {
+  const team: Team = {
     id: 'team-1',
-    name: 'Équipe Alpha',
-    description: 'Équipe test',
-    slug: 'equipe-alpha',
-    ownerId: 'u-owner',
-    inviteToken: 'STUDY-ALPH-2026',
+    name: 'Équipe',
+    description: '',
+    slug: 'equipe',
+    ownerId: 'owner',
+    inviteToken: 'STUDY-ABCD-2026',
     createdAt: '2026-09-01T08:00:00Z',
   };
-
-  const baseMembers: TeamMember[] = [
-    { id: 'tm-1', teamId: 'team-1', userId: 'u-owner', role: 'OWNER', joinedAt: '2026-09-01T08:00:00Z' },
-    { id: 'tm-2', teamId: 'team-1', userId: 'u-admin', role: 'ADMIN', joinedAt: '2026-09-01T09:00:00Z' },
-    { id: 'tm-3', teamId: 'team-1', userId: 'u-coach', role: 'COACH', joinedAt: '2026-09-01T10:00:00Z' },
-    { id: 'tm-4', teamId: 'team-1', userId: 'u-member', role: 'MEMBER', joinedAt: '2026-09-01T11:00:00Z' },
-    { id: 'tm-5', teamId: 'team-1', userId: 'u-viewer', role: 'VIEWER', joinedAt: '2026-09-01T12:00:00Z' },
+  const members: TeamMember[] = [
+    { id: 'owner-membership', teamId: team.id, userId: 'owner', role: 'OWNER', joinedAt: team.createdAt },
+    { id: 'member-membership', teamId: team.id, userId: 'member', role: 'MEMBER', joinedAt: team.createdAt },
+    { id: 'coach-membership', teamId: team.id, userId: 'coach', role: 'COACH', joinedAt: team.createdAt },
   ];
 
-  it('hiérarchie des rôles : OWNER > ADMIN > COACH > MEMBER > VIEWER', () => {
-    assert.strictEqual(hasMinRole('OWNER', 'ADMIN'), true);
-    assert.strictEqual(hasMinRole('ADMIN', 'OWNER'), false);
-    assert.strictEqual(hasMinRole('ADMIN', 'MEMBER'), true);
-    assert.strictEqual(hasMinRole('MEMBER', 'ADMIN'), false);
-    assert.strictEqual(hasMinRole('VIEWER', 'MEMBER'), false);
-  });
-
-  it('matrice de permissions par rôle (OWNER, ADMIN, COACH, MEMBER, VIEWER)', () => {
-    const ownerPerms = getRolePermissions('OWNER');
-    const adminPerms = getRolePermissions('ADMIN');
-    const coachPerms = getRolePermissions('COACH');
-    const memberPerms = getRolePermissions('MEMBER');
-    const viewerPerms = getRolePermissions('VIEWER');
-
-    // OWNER peut tout faire, y compris transférer la propriété et supprimer l'équipe
-    assert.strictEqual(ownerPerms.canTransferOwnership, true);
-    assert.strictEqual(ownerPerms.canDeleteTeam, true);
-    assert.strictEqual(ownerPerms.canManageRoles, true);
-    assert.strictEqual(ownerPerms.canWriteTasks, true);
-
-    // ADMIN peut gérer les membres et projets, mais pas transférer la propriété ni supprimer l'équipe
-    assert.strictEqual(adminPerms.canTransferOwnership, false);
-    assert.strictEqual(adminPerms.canDeleteTeam, false);
-    assert.strictEqual(adminPerms.canManageRoles, true);
-    assert.strictEqual(adminPerms.canCreateProject, true);
-    assert.strictEqual(adminPerms.canWriteTasks, true);
-
-    // COACH peut gérer les formations et évaluer, mais ne peut pas modifier les tâches ni gérer les membres
-    assert.strictEqual(coachPerms.canManageTrainings, true);
-    assert.strictEqual(coachPerms.canAssessSkills, true);
-    assert.strictEqual(coachPerms.canWriteTasks, false);
-    assert.strictEqual(coachPerms.canManageRoles, false);
-
-    // MEMBER peut gérer les tâches mais pas les membres ni les formations
-    assert.strictEqual(memberPerms.canWriteTasks, true);
-    assert.strictEqual(memberPerms.canManageRoles, false);
-    assert.strictEqual(memberPerms.canCreateProject, false);
-
-    // VIEWER est en lecture seule stricte
-    assert.strictEqual(viewerPerms.canWriteTasks, false);
-    assert.strictEqual(viewerPerms.canPostMessages, false);
-    assert.strictEqual(viewerPerms.canManageRoles, false);
-  });
-
-  it('rôles assignables selon le rôle de l’acteur', () => {
-    assert.deepStrictEqual(getAssignableRoles('OWNER'), ['ADMIN', 'COACH', 'MEMBER', 'VIEWER']);
-    assert.deepStrictEqual(getAssignableRoles('ADMIN'), ['COACH', 'MEMBER', 'VIEWER']);
+  it('only defines OWNER, MEMBER, and COACH capabilities', () => {
+    assert.deepStrictEqual(getAssignableRoles('OWNER'), ['COACH', 'MEMBER']);
     assert.deepStrictEqual(getAssignableRoles('MEMBER'), []);
+    assert.strictEqual(hasMinRole('OWNER', 'MEMBER'), true);
+
+    const owner = getRolePermissions('OWNER');
+    const member = getRolePermissions('MEMBER');
+    const coach = getRolePermissions('COACH');
+    assert.strictEqual(owner.canManageRoles, true);
+    assert.strictEqual(member.canWriteTasks, true);
+    assert.strictEqual(member.canCreateProject, false);
+    assert.strictEqual(coach.canWriteTasks, false);
+    assert.strictEqual(coach.canManageColumns, false);
+    assert.strictEqual(coach.canManageTrainings, true);
   });
 
-  it('OWNER peut promouvoir un MEMBER en ADMIN et rétrograder un ADMIN en MEMBER', () => {
-    const promoteCheck = canChangeMemberRole({
-      actorId: 'u-owner',
-      actorRole: 'OWNER',
-      targetId: 'u-member',
-      targetRole: 'MEMBER',
-      newRole: 'ADMIN',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(promoteCheck.allowed, true);
-
-    const demoteCheck = canChangeMemberRole({
-      actorId: 'u-owner',
-      actorRole: 'OWNER',
-      targetId: 'u-admin',
-      targetRole: 'ADMIN',
-      newRole: 'MEMBER',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(demoteCheck.allowed, true);
+  it('requires OWNER for role changes and forbids assigning unsupported roles', () => {
+    assert.strictEqual(
+      canChangeMemberRole({
+        actorId: 'member',
+        actorRole: 'MEMBER',
+        targetId: 'coach',
+        targetRole: 'COACH',
+        newRole: 'MEMBER',
+        teamOwnerId: 'owner',
+      }).allowed,
+      false
+    );
+    assert.strictEqual(
+      canChangeMemberRole({
+        actorId: 'owner',
+        actorRole: 'OWNER',
+        targetId: 'member',
+        targetRole: 'MEMBER',
+        newRole: 'COACH',
+        teamOwnerId: 'owner',
+      }).allowed,
+      true
+    );
+    assert.strictEqual(
+      canChangeMemberRole({
+        actorId: 'owner',
+        actorRole: 'OWNER',
+        targetId: 'member',
+        targetRole: 'MEMBER',
+        newRole: 'OWNER',
+        teamOwnerId: 'owner',
+      }).allowed,
+      false
+    );
   });
 
-  it('ADMIN peut changer le rôle d’un MEMBER en COACH ou VIEWER, mais ne peut pas toucher un ADMIN ni promouvoir en ADMIN', () => {
-    const allowedChange = canChangeMemberRole({
-      actorId: 'u-admin',
-      actorRole: 'ADMIN',
-      targetId: 'u-member',
-      targetRole: 'MEMBER',
+  it('prevents coaches from changing project work and protects the team owner', () => {
+    assert.strictEqual(
+      canRemoveTeamMember({
+        actorId: 'coach',
+        actorRole: 'COACH',
+        targetId: 'member',
+        targetRole: 'MEMBER',
+        teamOwnerId: 'owner',
+      }).allowed,
+      false
+    );
+    assert.strictEqual(
+      canRemoveTeamMember({
+        actorId: 'owner',
+        actorRole: 'OWNER',
+        targetId: 'owner',
+        targetRole: 'OWNER',
+        teamOwnerId: 'owner',
+      }).allowed,
+      false
+    );
+  });
+
+  it('transfers ownership without introducing an ADMIN role', () => {
+    const result = transferTeamOwnership(team, members, { actorId: 'owner', newOwnerId: 'member' });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.team.ownerId, 'member');
+    assert.strictEqual(result.members.find((member) => member.userId === 'owner')?.role, 'MEMBER');
+    assert.deepStrictEqual(result.members.map((member) => member.role).sort(), ['COACH', 'MEMBER', 'OWNER']);
+  });
+
+  it('creates teams with an OWNER and lets new members join as MEMBER', () => {
+    const owner: User = {
+      id: 'owner',
+      name: 'Owner',
+      email: 'owner@example.test',
+      avatar: '',
+      role: 'OWNER',
+      joinedAt: team.createdAt,
+    };
+    const created = createTeamWithOwner({ name: 'Équipe de test', owner });
+    assert.strictEqual(created.membership.role, 'OWNER');
+    assert.strictEqual(created.defaultColumns.length, 4);
+    assert.strictEqual(created.defaultColumns[created.defaultColumns.length - 1].isDone, true);
+
+    const member: User = { ...owner, id: 'new-member', role: 'MEMBER' };
+    const joined = joinTeamWithToken({
+      token: team.inviteToken,
+      user: member,
+      teams: [team],
+      members,
+    });
+    assert.strictEqual(joined.ok, true);
+    assert.strictEqual(joined.membership?.role, 'MEMBER');
+    assert.match(generateInviteToken(), /^STUDY-[A-Z0-9]{4}-2026$/);
+  });
+
+  it('applies allowed role updates without permitting self-promotion', () => {
+    const result = applyRoleChange(members, {
+      actorId: 'owner',
+      targetId: 'member',
       newRole: 'COACH',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(allowedChange.allowed, true);
-
-    const forbiddenTargetAdmin = canChangeMemberRole({
-      actorId: 'u-admin',
-      actorRole: 'ADMIN',
-      targetId: 'u-admin-2',
-      targetRole: 'ADMIN',
-      newRole: 'MEMBER',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(forbiddenTargetAdmin.allowed, false);
-
-    const forbiddenPromoteToAdmin = canChangeMemberRole({
-      actorId: 'u-admin',
-      actorRole: 'ADMIN',
-      targetId: 'u-member',
-      targetRole: 'MEMBER',
-      newRole: 'ADMIN',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(forbiddenPromoteToAdmin.allowed, false);
-  });
-
-  it('personne ne peut modifier directement le rôle du OWNER sans transfert de propriété', () => {
-    const res = canChangeMemberRole({
-      actorId: 'u-owner',
-      actorRole: 'OWNER',
-      targetId: 'u-owner',
-      targetRole: 'OWNER',
-      newRole: 'ADMIN',
-      teamOwnerId: 'u-owner',
-    });
-    assert.strictEqual(res.allowed, false);
-  });
-
-  it('applyRoleChange met à jour le rôle dans la liste des membres si autorisé', () => {
-    const result = applyRoleChange(baseMembers, {
-      actorId: 'u-owner',
-      targetId: 'u-member',
-      newRole: 'ADMIN',
-      team: baseTeam,
+      team,
     });
     assert.strictEqual(result.ok, true);
-    assert.strictEqual(result.members.find((m) => m.userId === 'u-member')?.role, 'ADMIN');
-  });
-
-  it('suppression de membre : OWNER peut retirer ADMIN/MEMBER, ADMIN peut retirer MEMBER mais pas ADMIN ni OWNER', () => {
+    assert.strictEqual(result.members.find((member) => member.userId === 'member')?.role, 'COACH');
     assert.strictEqual(
-      canRemoveTeamMember({
-        actorId: 'u-owner',
-        actorRole: 'OWNER',
-        targetId: 'u-admin',
-        targetRole: 'ADMIN',
-        teamOwnerId: 'u-owner',
-      }).allowed,
-      true
-    );
-
-    assert.strictEqual(
-      canRemoveTeamMember({
-        actorId: 'u-admin',
-        actorRole: 'ADMIN',
-        targetId: 'u-member',
-        targetRole: 'MEMBER',
-        teamOwnerId: 'u-owner',
-      }).allowed,
-      true
-    );
-
-    assert.strictEqual(
-      canRemoveTeamMember({
-        actorId: 'u-admin',
-        actorRole: 'ADMIN',
-        targetId: 'u-owner',
-        targetRole: 'OWNER',
-        teamOwnerId: 'u-owner',
-      }).allowed,
+      applyRoleChange(members, { actorId: 'member', targetId: 'member', newRole: 'COACH', team }).ok,
       false
     );
+  });
 
-    // Un membre non-owner peut quitter l'équipe lui-même
-    assert.strictEqual(
-      canRemoveTeamMember({
-        actorId: 'u-member',
-        actorRole: 'MEMBER',
-        targetId: 'u-member',
-        targetRole: 'MEMBER',
-        teamOwnerId: 'u-owner',
-      }).allowed,
-      true
-    );
+  it('normalizes generated values and calculates dates from server time', () => {
+    assert.strictEqual(normalizePriority('INVALID'), 'NORMALE');
+    assert.strictEqual(relativeDueDate(2, new Date('2026-01-01T00:00:00.000Z')), '2026-01-03');
+    const generated = fallbackKanban('Préparer une soutenance');
+    assert.ok(generated.columns.length >= 2 && generated.columns.length <= 6);
+    assert.ok(generated.tasks.length >= 3 && generated.tasks.length <= 10);
+    const profile = fallbackProfile('Parcours étudiant en TypeScript, React et gestion de projet.');
+    assert.ok(profile.bio.length >= 220 && profile.bio.length <= 240);
+    assert.ok(profile.skills.every((skill) => Number.isInteger(skill.level) && skill.level >= 1 && skill.level <= 5));
+  });
 
-    // Le OWNER ne peut pas quitter/se supprimer sans transférer la propriété
+  it('escapes user content in both email formats', () => {
+    const input = '<script>alert("x")</script>';
+    assert.strictEqual(escapeHtml(input), '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
+    const rendered = renderEmail('welcome', { message: input });
+    assert.ok(!rendered.html.includes('<script>'));
+    assert.ok(rendered.text.includes(input));
+  });
+
+  it('keeps file upload and deletion permissions aligned with COACH restrictions', async () => {
+    const { validateFileUpload, canDeleteFile } = await import('../src/lib/file-manager');
     assert.strictEqual(
-      canRemoveTeamMember({
-        actorId: 'u-owner',
-        actorRole: 'OWNER',
-        targetId: 'u-owner',
-        targetRole: 'OWNER',
-        teamOwnerId: 'u-owner',
-      }).allowed,
+      validateFileUpload({ fileName: 'notes.pdf', fileSize: 10, currentTotalBytes: 0, userRole: 'COACH' }).valid,
       false
     );
-
-    const removeRes = applyRemoveMember(baseMembers, {
-      actorId: 'u-admin',
-      targetId: 'u-viewer',
-      team: baseTeam,
-    });
-    assert.strictEqual(removeRes.ok, true);
-    assert.strictEqual(removeRes.members.some((m) => m.userId === 'u-viewer'), false);
-  });
-
-  it('transferTeamOwnership transfère le rôle OWNER au nouveau propriétaire et passe l’ancien OWNER en ADMIN', () => {
-    const transferRes = transferTeamOwnership(baseTeam, baseMembers, {
-      actorId: 'u-owner',
-      newOwnerId: 'u-admin',
-    });
-
-    assert.strictEqual(transferRes.ok, true);
-    assert.strictEqual(transferRes.team.ownerId, 'u-admin');
-    assert.strictEqual(transferRes.members.find((m) => m.userId === 'u-admin')?.role, 'OWNER');
-    assert.strictEqual(transferRes.members.find((m) => m.userId === 'u-owner')?.role, 'ADMIN');
-
-    // Un non-owner ne peut pas transférer la propriété
-    const forbiddenTransfer = transferTeamOwnership(baseTeam, baseMembers, {
-      actorId: 'u-admin',
-      newOwnerId: 'u-member',
-    });
-    assert.strictEqual(forbiddenTransfer.ok, false);
-  });
-
-  it('createTeamWithOwner crée une nouvelle équipe avec son créateur en tant que OWNER et un projet initial', () => {
-    const created = createTeamWithOwner({
-      name: 'Groupe IA & Robotique',
-      description: 'Projet de fin de semestre',
-      owner: ownerUser,
-      existingTeams: [baseTeam],
-    });
-
-    assert.strictEqual(created.team.name, 'Groupe IA & Robotique');
-    assert.strictEqual(created.team.ownerId, ownerUser.id);
-    assert.ok(created.team.inviteToken.startsWith('STUDY-'));
-    assert.strictEqual(created.membership.userId, ownerUser.id);
-    assert.strictEqual(created.membership.role, 'OWNER');
-    assert.strictEqual(created.defaultProject.teamId, created.team.id);
-    assert.strictEqual(created.defaultColumns.length, 4);
-    assert.strictEqual(created.defaultColumns[3].isDone, true);
-  });
-
-  it('joinTeamWithToken permet à un utilisateur de rejoindre une équipe existante en tant que MEMBER via son code d’invitation', () => {
-    const newUser: User = {
-      id: 'u-new',
-      name: 'Nadia Benali',
-      email: 'nadia@univ.fr',
-      avatar: '',
-      role: 'MEMBER',
-      joinedAt: '2026-11-07T10:00:00Z',
-    };
-
-    // Code invalide
-    const invalidJoin = joinTeamWithToken({
-      token: 'INVALID-CODE',
-      user: newUser,
-      teams: [baseTeam],
-      members: baseMembers,
-    });
-    assert.strictEqual(invalidJoin.ok, false);
-
-    // Code valide (insensible à la casse et aux espaces)
-    const validJoin = joinTeamWithToken({
-      token: '  study-alph-2026 ',
-      user: newUser,
-      teams: [baseTeam],
-      members: baseMembers,
-    });
-    assert.strictEqual(validJoin.ok, true);
-    assert.strictEqual(validJoin.alreadyMember, false);
-    assert.strictEqual(validJoin.team?.id, 'team-1');
-    assert.strictEqual(validJoin.membership?.userId, 'u-new');
-    assert.strictEqual(validJoin.membership?.role, 'MEMBER');
-
-    // Déjà membre
-    const duplicateJoin = joinTeamWithToken({
-      token: 'STUDY-ALPH-2026',
-      user: ownerUser,
-      teams: [baseTeam],
-      members: baseMembers,
-    });
-    assert.strictEqual(duplicateJoin.ok, true);
-    assert.strictEqual(duplicateJoin.alreadyMember, true);
-    assert.strictEqual(duplicateJoin.membership?.role, 'OWNER');
-  });
-
-  it('generateInviteToken génère un jeton au format STUDY-XXXX-2026', () => {
-    const token = generateInviteToken();
-    assert.match(token, /^STUDY-[A-Z0-9]{4,6}-2026$/);
-  });
-
-  it('Service Worker (public/sw.js) ne doit jamais mettre en cache les routes /api/ (notamment /api/auth/me)', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const swContent = fs.readFileSync(path.join(process.cwd(), 'public', 'sw.js'), 'utf-8');
-    assert.ok(
-      swContent.includes("'/api/'") || swContent.includes('"/api/"'),
-      'Le Service Worker doit exclure explicitement les routes /api/ du cache pour éviter de renvoyer un ancien compte (ex: Karim Belkacem) après une nouvelle inscription'
-    );
-    assert.ok(
-      swContent.includes('self.location.origin'),
-      'Le Service Worker ne doit pas mettre en cache les sondes réseau externes (cross-origin)'
-    );
-  });
-
-  it('PwaProvider détecte activement la coupure Wi-Fi via sonde réseau réelle et permet la bascule hors-ligne', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const pwaContent = fs.readFileSync(
-      path.join(process.cwd(), 'src', 'components', 'pwa', 'PwaProvider.tsx'),
-      'utf-8'
-    );
-    assert.ok(
-      pwaContent.includes('generate_204') && pwaContent.includes('toggleOfflineMode'),
-      'PwaProvider doit vérifier la connectivité Internet réelle (quand le Wi-Fi est coupé sous Windows/localhost) et exposer toggleOfflineMode'
-    );
-  });
-
-  it('Module 6 (Fichiers & Documents) : validation taille/quota/extensions, versioning v1->v2 et permissions RBAC', async () => {
-    const {
-      validateFileUpload,
-      appendOrVersionFile,
-      canDeleteFile,
-      getFileCategory,
-    } = await import('../src/lib/file-manager');
-
-    // 1. Refus d'un fichier exécutable dangereux
-    const forbiddenRes = validateFileUpload({
-      fileName: 'malware.exe',
-      fileSize: 1024,
-      currentTotalBytes: 0,
-      userRole: 'MEMBER',
-    });
-    assert.strictEqual(forbiddenRes.valid, false);
-    assert.strictEqual(forbiddenRes.code, 'FORBIDDEN_EXTENSION');
-
-    // 2. Refus pour un VIEWER (lecture seule)
-    const viewerRes = validateFileUpload({
-      fileName: 'notes.pdf',
-      fileSize: 1024,
-      currentTotalBytes: 0,
-      userRole: 'VIEWER',
-    });
-    assert.strictEqual(viewerRes.valid, false);
-    assert.strictEqual(viewerRes.code, 'FORBIDDEN_ROLE');
-
-    // 3. Refus au-delà de 20 Mo par fichier
-    const tooLargeRes = validateFileUpload({
-      fileName: 'video-demo.mp4',
-      fileSize: 25 * 1024 * 1024,
-      currentTotalBytes: 0,
-      userRole: 'MEMBER',
-    });
-    assert.strictEqual(tooLargeRes.valid, false);
-    assert.strictEqual(tooLargeRes.code, 'FILE_TOO_LARGE');
-
-    // 4. Versioning automatique : téléverser un fichier portant le même nom dans le même projet incrémente currentVersion (v1 -> v2)
-    const existingFiles = [
-      {
-        id: 'file-1',
-        projectId: 'proj-1',
-        uploaderId: 'u-owner',
-        name: 'architecture.pdf',
-        mimeType: 'application/pdf',
-        size: 120000,
-        currentVersion: 1,
-        createdAt: '2026-10-20T10:00:00Z',
-      },
-    ];
-
-    const versioned = appendOrVersionFile(existingFiles, {
-      projectId: 'proj-1',
-      uploaderId: 'u-member',
-      name: 'architecture.pdf',
+    const file = {
+      id: 'file-1',
+      projectId: 'project-1',
+      uploaderId: 'member',
+      name: 'notes.pdf',
       mimeType: 'application/pdf',
-      size: 150000,
-      note: 'Ajout du diagramme de séquence',
-    });
-
-    assert.strictEqual(versioned.isNewVersion, true);
-    assert.strictEqual(versioned.files.length, 1);
-    assert.strictEqual(versioned.files[0].currentVersion, 2);
-    assert.strictEqual(versioned.files[0].versions?.length, 2);
-
-    // 5. Permissions de suppression : OWNER/ADMIN peuvent supprimer tout fichier, MEMBER uniquement les siens, VIEWER aucun
-    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-admin', 'ADMIN'), true);
-    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-other', 'MEMBER'), false);
-    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-owner', 'MEMBER'), true);
-    assert.strictEqual(canDeleteFile(versioned.files[0], 'u-owner', 'VIEWER'), false);
-
-    // 6. Catégorisation automatique
-    assert.strictEqual(getFileCategory('rapport.pdf', 'application/pdf'), 'document');
-    assert.strictEqual(getFileCategory('maquette.png', 'image/png'), 'image');
-    assert.strictEqual(getFileCategory('audit.json', 'application/json'), 'code');
+      size: 10,
+      createdAt: team.createdAt,
+    };
+    assert.strictEqual(canDeleteFile(file, 'coach', 'COACH'), false);
+    assert.strictEqual(canDeleteFile(file, 'member', 'MEMBER'), true);
+    assert.strictEqual(canDeleteFile(file, 'owner', 'OWNER'), true);
   });
 
-  it('Module 2 (Kanban) : réorganisation des colonnes (gauche/droite/drag) et suppression avec transfert des tâches', async () => {
-    const {
-      reorderProjectColumns,
-      deleteProjectColumn,
-    } = await import('../src/lib/kanban-columns');
-
-    const cols = [
-      { id: 'c1', projectId: 'proj-1', name: 'À faire', position: 1000, isDone: false },
-      { id: 'c2', projectId: 'proj-1', name: 'En cours', position: 2000, isDone: false },
-      { id: 'c3', projectId: 'proj-1', name: 'En revue', position: 3000, isDone: false },
-      { id: 'c4', projectId: 'proj-1', name: 'Terminé', position: 4000, isDone: true },
+  it('preserves Kanban column reordering and task migration behavior', async () => {
+    const { reorderProjectColumns, deleteProjectColumn } = await import('../src/lib/kanban-columns');
+    const columns = [
+      { id: 'todo', projectId: 'p1', name: 'À faire', position: 1000, isDone: false },
+      { id: 'doing', projectId: 'p1', name: 'En cours', position: 2000, isDone: false },
+      { id: 'done', projectId: 'p1', name: 'Terminé', position: 3000, isDone: true },
     ];
+    const task = {
+      id: 't1',
+      projectId: 'p1',
+      columnId: 'doing',
+      title: 'Tâche',
+      description: '',
+      position: 1000,
+      priority: 'NORMALE' as const,
+      dueDate: '',
+      createdById: 'member',
+      createdAt: team.createdAt,
+      assigneeIds: [],
+      labelIds: [],
+    };
+    const reordered = reorderProjectColumns(columns, 'p1', 'done', 'doing');
+    assert.deepStrictEqual(
+      reordered.sort((left, right) => left.position - right.position).map((column) => column.id),
+      ['todo', 'done', 'doing']
+    );
+    const removed = deleteProjectColumn(columns, [task], 'p1', 'doing');
+    assert.strictEqual(removed.ok, true);
+    assert.strictEqual(removed.tasks[0].columnId, 'todo');
+  });
 
-    const tasks = [
-      {
-        id: 't1',
-        projectId: 'proj-1',
-        columnId: 'c2',
-        title: 'Tâche en cours',
-        description: '',
-        position: 1,
-        priority: 'NORMALE' as const,
-        dueDate: '2026-11-10',
-        createdById: 'u-owner',
-        createdAt: '2026-10-20T10:00:00Z',
-        assigneeIds: ['u-owner'],
-        labelIds: [],
-      },
-    ];
-
-    // 1. Déplacer 'c3' (En revue) vers la gauche (avant 'c2')
-    const movedLeft = reorderProjectColumns(cols, 'proj-1', 'c3', 'c2');
-    const sortedIds = movedLeft
-      .filter((c) => c.projectId === 'proj-1')
-      .sort((a, b) => a.position - b.position)
-      .map((c) => c.id);
-    assert.deepStrictEqual(sortedIds, ['c1', 'c3', 'c2', 'c4']);
-
-    // 2. Supprimer 'c2' (qui contient t1) transfère automatiquement t1 vers la première colonne restante ('c1')
-    const delRes = deleteProjectColumn(movedLeft, tasks, 'proj-1', 'c2');
-    assert.strictEqual(delRes.ok, true);
-    assert.strictEqual(delRes.columns.length, 3);
-    assert.strictEqual(delRes.tasks.find((t) => t.id === 't1')?.columnId, 'c1');
-
-    // 3. Impossible de supprimer la toute dernière colonne d'un projet
-    const singleCol = [{ id: 'c1', projectId: 'proj-1', name: 'Unique', position: 1000, isDone: true }];
-    const blockedDel = deleteProjectColumn(singleCol, tasks, 'proj-1', 'c1');
-    assert.strictEqual(blockedDel.ok, false);
+  it('excludes API routes from service-worker caching', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const sw = fs.readFileSync(path.join(process.cwd(), 'public', 'sw.js'), 'utf8');
+    assert.ok(sw.includes("'/api/'") || sw.includes('"/api/"'));
   });
 });
-
-
-

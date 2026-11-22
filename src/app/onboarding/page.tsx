@@ -80,7 +80,7 @@ export default function OnboardingPage() {
           id: meRes.user.id,
           name: meRes.user.name,
           email: meRes.user.email,
-          avatar: meRes.user.image || store.currentUser.avatar,
+          avatar: '',
           role: meRes.user.role || 'MEMBER',
           joinedAt: new Date().toISOString(),
         };
@@ -517,7 +517,7 @@ export default function OnboardingPage() {
                 <Shield className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-slate-300 leading-relaxed">
                   <strong className="text-white block mb-0.5">Vous serez Propriétaire (OWNER) de cette équipe</strong>
-                  Vous disposerez de tous les droits d&apos;administration : génération du code d&apos;invitation, promotion d&apos;administrateurs (<strong>ADMIN</strong>), ajout de coachs enseignants (<strong>COACH</strong>), gestion des membres (<strong>MEMBER</strong> / <strong>VIEWER</strong>) et transfert de propriété.
+                  Vous disposerez de tous les droits d&apos;administration : génération du code d&apos;invitation, ajout de coachs (<strong>COACH</strong>) et de membres (<strong>MEMBER</strong>), gestion des rôles et transfert de propriété.
                 </div>
               </div>
 

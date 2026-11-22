@@ -157,7 +157,7 @@ export async function assertPermission(
   }
 
   if (resolvedTeamId) {
-    const { authorized, memberRole } = await requireTeamRole(resolvedTeamId, 'VIEWER', context.userId);
+    const { authorized, memberRole } = await requireTeamRole(resolvedTeamId, 'MEMBER', context.userId);
     if (!authorized || !memberRole) {
       throw new Error(`Permission insuffisante pour l'action : ${action}`);
     }
@@ -178,20 +178,37 @@ export async function assertPermission(
     ];
     if (taskWriteActions.includes(action) && !perms.canWriteTasks) {
       throw new Error(
-        `Action interdite pour le rôle ${memberRole} : les tâches ne peuvent être modifiées que par les membres contributeurs (OWNER, ADMIN, MEMBER)`
+        `Action interdite pour le rôle ${memberRole} : les tâches ne peuvent être modifiées que par OWNER ou MEMBER`
       );
+    }
+
+    const columnWriteActions = [
+      'create_column',
+      'update_column',
+      'delete_column',
+      'reorder_columns',
+      'column.create',
+      'column.update',
+      'column.delete',
+    ];
+    if (columnWriteActions.includes(action) && !perms.canManageColumns) {
+      throw new Error(`Action interdite pour le rôle ${memberRole} : les colonnes ne peuvent être modifiées que par OWNER ou MEMBER.`);
+    }
+
+    if (['upload_file', 'update_file'].includes(action) && !perms.canWriteFiles) {
+      throw new Error(`Action interdite pour le rôle ${memberRole} : le rôle COACH ne peut pas modifier les fichiers du projet.`);
     }
 
     if ((action === 'create_project' || action === 'delete_project') && !perms.canCreateProject) {
       throw new Error(
-        `Action interdite pour le rôle ${memberRole} : seuls OWNER et ADMIN peuvent créer ou supprimer un projet`
+        `Action interdite pour le rôle ${memberRole} : seuls OWNER peut créer ou supprimer un projet`
       );
     }
 
     const memberManageActions = ['invite_member', 'update_role', 'remove_member', 'regenerate_token'];
     if (memberManageActions.includes(action) && !perms.canManageRoles) {
       throw new Error(
-        `Action interdite pour le rôle ${memberRole} : seuls les rôles OWNER et ADMIN peuvent gérer l'équipe`
+        `Action interdite pour le rôle ${memberRole} : seul le rôle OWNER peut gérer l'équipe`
       );
     }
 

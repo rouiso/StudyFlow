@@ -7,15 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test tests/business-logic.test.ts tests/user-management.test.ts",
+    "test": "tsx --test tests/business-logic.test.ts tests/user-management.test.ts tests/ai-service.test.ts tests/password.test.ts",
     "realtime": "tsx realtime/server.ts",
-    "db:seed": "tsx scripts/seed-mongo.ts"
+    "scheduler": "tsx scripts/scheduler.ts",
+    "db:seed": "tsx scripts/seed-mongo.ts",
+    "db:sync-demo": "tsx scripts/sync-demo-data.ts"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
     "mongodb": "^7.9.1",
     "next": "15.1.7",
+    "nodemailer": "^10.6.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "socket.io": "^4.8.4",

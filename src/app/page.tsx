@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
   loadStudyFlowData,
   saveStudyFlowData,
@@ -35,7 +34,6 @@ import {
   joinTeamWithToken,
   generateInviteToken,
   getRolePermissions,
-  ROLE_METADATA,
 } from '@/lib/user-management';
 import { appendOrVersionFile } from '@/lib/file-manager';
 import {
@@ -51,17 +49,21 @@ import { CalendarView } from '@/components/calendar/CalendarView';
 import { ProjectChatView } from '@/components/chat/ProjectChatView';
 import { ProjectStatsView } from '@/components/stats/ProjectStatsView';
 import { AiCopilotView } from '@/components/ai/AiCopilotView';
+import { AiChatbot } from '@/components/ai/AiChatbot';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TeamInviteModal } from '@/components/teams/TeamInviteModal';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { TrainingCoachingView } from '@/components/training/TrainingCoachingView';
 import { DatabaseInspectorModal } from '@/components/database/DatabaseInspectorModal';
-import { Users, PlusCircle, Shield, Database, Edit3 } from 'lucide-react';
+import { UserAvatar } from '@/components/UserAvatar';
+import { Database, Edit3, Shield } from 'lucide-react';
 
 export default function StudyFlowHome() {
   const [data, setData] = useState<StudyFlowData>(initialData);
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('kanban');
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [aiChatModule, setAiChatModule] = useState('kanban');
   const [currentTeamId, setCurrentTeamId] = useState<string>('team-1');
   const [currentProjectId, setCurrentProjectId] = useState<string>('proj-1');
 
@@ -73,6 +75,21 @@ export default function StudyFlowHome() {
   const [isDbInspectorOpen, setIsDbInspectorOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalDefaultColId, setModalDefaultColId] = useState<string | undefined>();
+
+  const openAiAssistant = (module?: string) => {
+    setAiChatModule(
+      module ??
+        {
+          kanban: 'kanban',
+          tasks: 'tasks',
+          calendar: 'agenda',
+          stats: 'projects',
+          chat: 'chat',
+          coaching: 'coaching',
+        }[activeTab]
+    );
+    setIsAiChatOpen(true);
+  };
 
   // Chargement et contrôle d'accès : redirection vers /login si non authentifié, ou /onboarding si aucune équipe
   useEffect(() => {
@@ -193,9 +210,7 @@ export default function StudyFlowHome() {
           id: resData.user.id,
           name: resData.user.name,
           email: resData.user.email,
-          avatar:
-            resData.user.image ||
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          avatar: '',
           role: resolvedRole,
           joinedAt: new Date().toISOString(),
         };
@@ -338,7 +353,7 @@ export default function StudyFlowHome() {
     subtasksData: { title: string; done: boolean }[]
   ) => {
     if (!rolePerms.canWriteTasks) {
-      alert(`Action réservée aux rôles OWNER, ADMIN et MEMBER.`);
+      alert(`Action réservée aux rôles OWNER et MEMBER.`);
       return;
     }
 
@@ -606,44 +621,83 @@ export default function StudyFlowHome() {
   };
 
   // JALONS (MILESTONES)
-  const handleAddMilestone = (milestoneData: Omit<Milestone, 'id'>) => {
-    const newMilestone: Milestone = {
-      ...milestoneData,
-      id: `mile-${Date.now()}`,
-    };
+  const persistMilestones = async (
+    milestoneData: (Omit<Milestone, 'id'> & { id?: string })[]
+  ) => {
+    if (!milestoneData.length) return;
+    const projectId = milestoneData[0].projectId;
+    if (milestoneData.some((milestone) => milestone.projectId !== projectId)) {
+      throw new Error('Les événements doivent appartenir au même projet.');
+    }
+    const now = Date.now();
+    const events = milestoneData.map((milestone, index) => ({
+      ...milestone,
+      id: milestone.id || `mile-${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    }));
+    const response = await fetch('/api/milestones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ projectId, events }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok || !Array.isArray(result.data)) {
+      throw new Error(result.error || 'Impossible d’enregistrer les événements dans le calendrier.');
+    }
+
+    const savedMilestones: Milestone[] = result.data.map((milestone: {
+      id: string;
+      projectId: string;
+      title: string;
+      date: string | Date;
+      description: string;
+      completed: boolean;
+    }) => ({
+      ...milestone,
+      date: milestone.date instanceof Date
+        ? milestone.date.toISOString().slice(0, 10)
+        : String(milestone.date).slice(0, 10),
+    }));
 
     updateData((prev) => ({
       ...prev,
-      milestones: [...prev.milestones, newMilestone],
+      milestones: prev.milestones
+        .map((milestone) => savedMilestones.find((saved) => saved.id === milestone.id) || milestone)
+        .concat(savedMilestones.filter((saved) => !prev.milestones.some((milestone) => milestone.id === saved.id))),
     }));
   };
 
-  const handleToggleMilestone = (milestoneId: string) => {
-    updateData((prev) => ({
-      ...prev,
-      milestones: prev.milestones.map((m) =>
-        m.id === milestoneId ? { ...m, completed: !m.completed } : m
-      ),
-    }));
+  const handleAddMilestones = (milestoneData: Omit<Milestone, 'id'>[]) =>
+    persistMilestones(milestoneData);
+
+  const handleToggleMilestone = async (milestoneId: string) => {
+    const milestone = data.milestones.find((item) => item.id === milestoneId);
+    if (!milestone) throw new Error('Jalon introuvable.');
+    await persistMilestones([{ ...milestone, completed: !milestone.completed }]);
   };
 
-  const handleDeleteMilestone = (milestoneId: string) => {
+  const handleDeleteMilestone = async (milestoneId: string) => {
+    const response = await fetch(`/api/milestones?id=${encodeURIComponent(milestoneId)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || 'Impossible de supprimer le jalon.');
+    }
     updateData((prev) => ({
       ...prev,
       milestones: prev.milestones.filter((m) => m.id !== milestoneId),
     }));
   };
 
-  const handleUpdateMilestone = (
+  const handleUpdateMilestone = async (
     milestoneId: string,
     updates: Partial<Omit<Milestone, 'id'>>
   ) => {
-    updateData((prev) => ({
-      ...prev,
-      milestones: prev.milestones.map((m) =>
-        m.id === milestoneId ? { ...m, ...updates } : m
-      ),
-    }));
+    const milestone = data.milestones.find((item) => item.id === milestoneId);
+    if (!milestone) throw new Error('Jalon introuvable.');
+    await persistMilestones([{ ...milestone, ...updates }]);
   };
 
   // RAPPORT PROJET
@@ -667,7 +721,7 @@ export default function StudyFlowHome() {
       recommendations: [
         'Maintenir la cadence sur les tests unitaires et d’intégration.',
         'Vérifier les critères d’acceptation sur smartphone avant la démonstration.',
-        'Préparer le déroulé de présentation en s’appuyant sur la fiche IA Copilot.',
+        'Préparer le déroulé de présentation en s’appuyant sur la fiche de synthèse IA.',
       ],
     };
 
@@ -787,10 +841,10 @@ export default function StudyFlowHome() {
         ...prev,
         teams: prev.teams.map((t) => (t.id === currentTeam.id ? res.team : t)),
         members: res.members,
-        currentUser: { ...prev.currentUser, role: 'ADMIN' },
+        currentUser: { ...prev.currentUser, role: 'MEMBER' },
         users: prev.users.map((u) => {
           if (u.id === newOwnerId) return { ...u, role: 'OWNER' as UserRole };
-          if (u.id === prev.currentUser.id) return { ...u, role: 'ADMIN' as UserRole };
+          if (u.id === prev.currentUser.id) return { ...u, role: 'MEMBER' as UserRole };
           return u;
         }),
       };
@@ -816,7 +870,7 @@ export default function StudyFlowHome() {
               id: `user-${Date.now()}`,
               name: params.name,
               email: params.email.toLowerCase(),
-              avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 1000)}?w=150`,
+              avatar: '',
               role: params.role,
               joinedAt: new Date().toISOString(),
             };
@@ -1075,6 +1129,40 @@ export default function StudyFlowHome() {
     updateData((prev) => ({
       ...prev,
       columns: [...prev.columns, newCol],
+    }));
+  };
+
+  const handleApplyGeneratedColumns = (
+    generated: { name: string; wipLimit: number | null; isDone: boolean }[]
+  ) => {
+    if (!rolePerms.canWriteTasks || !generated.length) return;
+    updateData((prev) => {
+      const currentColumns = prev.columns.filter((column) => column.projectId === currentProject.id);
+      const hasDoneColumn = currentColumns.some((column) => column.isDone);
+      const doneIndex = generated.findIndex((column) => column.isDone);
+      const newColumns: Column[] = generated.map((column, index) => ({
+        id: `col-ai-${Date.now()}-${index}`,
+        projectId: currentProject.id,
+        name: column.name,
+        position: (currentColumns.length + index + 1) * 1000,
+        wipLimit: column.wipLimit,
+        isDone: !hasDoneColumn && index === (doneIndex < 0 ? generated.length - 1 : doneIndex),
+      }));
+      return { ...prev, columns: [...prev.columns, ...newColumns] };
+    });
+  };
+
+  const handleApplyGeneratedKanban = (result: {
+    columns: Column[];
+    tasks: Task[];
+    subtasks: Subtask[];
+  }) => {
+    if (!rolePerms.canWriteTasks || result.columns.some((column) => column.projectId !== currentProject.id)) return;
+    updateData((prev) => ({
+      ...prev,
+      columns: [...prev.columns, ...result.columns.filter((column) => !prev.columns.some((item) => item.id === column.id))],
+      tasks: [...prev.tasks, ...result.tasks.filter((task) => !prev.tasks.some((item) => item.id === task.id))],
+      subtasks: [...prev.subtasks, ...result.subtasks.filter((subtask) => !prev.subtasks.some((item) => item.id === subtask.id))],
     }));
   };
 
@@ -1421,7 +1509,7 @@ export default function StudyFlowHome() {
         }}
       />
 
-      {/* Barre de Session, Équipe Active & Moteur de Rôles (OWNER, ADMIN, COACH, MEMBER, VIEWER) */}
+      {/* Informations de session et actions administratives */}
       <div className="bg-slate-900/90 border-b border-slate-800/80 px-3 sm:px-6 py-2">
         <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1430,27 +1518,8 @@ export default function StudyFlowHome() {
               Session :
             </span>
             <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700/80">
-              <img
-                src={effectiveCurrentUser.avatar}
-                alt={effectiveCurrentUser.name}
-                className="w-5 h-5 rounded-full object-cover ring-1 ring-indigo-400"
-              />
+              <UserAvatar name={effectiveCurrentUser.name} className="w-5 h-5 text-[7px] ring-1 ring-indigo-400" />
               <span className="text-xs font-bold text-white">{effectiveCurrentUser.name}</span>
-              <span
-                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
-                  ROLE_METADATA[effectiveUserRole]?.badgeClass || ROLE_METADATA.MEMBER.badgeClass
-                }`}
-              >
-                {effectiveUserRole}
-              </span>
-            </div>
-
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300">
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="font-semibold text-white">{currentTeam.name}</span>
-              <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded">
-                {currentTeam.inviteToken}
-              </span>
             </div>
           </div>
 
@@ -1472,6 +1541,15 @@ export default function StudyFlowHome() {
 
             <button
               type="button"
+              onClick={() => setIsTeamModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Équipe &amp; Rôles</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsDbInspectorOpen(true)}
               className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
               title="Inspecter les collections MongoDB (Soutenance)"
@@ -1480,22 +1558,6 @@ export default function StudyFlowHome() {
               <span>Base de Données (MongoDB)</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsTeamModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Gérer Membres & Rôles</span>
-            </button>
-
-            <Link
-              href="/onboarding"
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Rejoindre / Créer une équipe</span>
-            </Link>
           </div>
         </div>
       </div>
@@ -1503,40 +1565,71 @@ export default function StudyFlowHome() {
       {/* Contenu Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 pb-24">
         {activeTab === 'kanban' && (
-          <KanbanBoard
-            columns={currentColumns}
-            tasks={currentTasks}
-            subtasks={data.subtasks}
-            users={teamUsers}
-            labels={data.labels.filter((l) => l.projectId === currentProject.id)}
-            currentUser={effectiveCurrentUser}
-            onOpenTaskModal={handleOpenTaskModal}
-            onMoveTask={handleMoveTask}
-            onAddColumn={handleAddColumn}
-            onDeleteColumn={handleDeleteColumn}
-            onMoveColumn={handleMoveColumn}
-            onReorderColumns={handleReorderColumns}
-            onUpdateColumn={handleUpdateColumn}
-          />
+          <>
+            <AiCopilotView
+              key={`${currentProject.id}-kanban`}
+              tools={['kanban', 'columns']}
+              project={currentProject}
+              tasks={currentTasks}
+              columns={currentColumns}
+              users={teamUsers}
+              subtasks={data.subtasks}
+              onCreateTaskFromAi={(taskData, subs) => handleSaveTask(taskData, subs)}
+              canGenerate={rolePerms.canWriteTasks}
+              onApplyGeneratedColumns={handleApplyGeneratedColumns}
+              onApplyGeneratedKanban={handleApplyGeneratedKanban}
+            />
+            <KanbanBoard
+              columns={currentColumns}
+              tasks={currentTasks}
+              subtasks={data.subtasks}
+              users={teamUsers}
+              labels={data.labels.filter((l) => l.projectId === currentProject.id)}
+              currentUser={effectiveCurrentUser}
+              onOpenTaskModal={handleOpenTaskModal}
+              onMoveTask={handleMoveTask}
+              onAddColumn={handleAddColumn}
+              onDeleteColumn={handleDeleteColumn}
+              onMoveColumn={handleMoveColumn}
+              onReorderColumns={handleReorderColumns}
+              onUpdateColumn={handleUpdateColumn}
+            />
+          </>
         )}
 
         {activeTab === 'tasks' && (
-          <TasksListView
-            tasks={currentTasks}
-            subtasks={data.subtasks}
-            columns={currentColumns}
-            users={teamUsers}
-            labels={data.labels.filter((l) => l.projectId === currentProject.id)}
-            currentUser={effectiveCurrentUser}
-            onOpenTaskModal={handleOpenTaskModal}
-            onToggleSubtask={handleToggleSubtask}
-            onDeleteTask={handleDeleteTask}
-          />
+          <>
+            <AiCopilotView
+              key={`${currentProject.id}-tasks`}
+              tools={['breakdown']}
+              project={currentProject}
+              tasks={currentTasks}
+              columns={currentColumns}
+              users={teamUsers}
+              subtasks={data.subtasks}
+              onCreateTaskFromAi={(taskData, subs) => handleSaveTask(taskData, subs)}
+              canGenerate={rolePerms.canWriteTasks}
+              onApplyGeneratedColumns={handleApplyGeneratedColumns}
+              onApplyGeneratedKanban={handleApplyGeneratedKanban}
+            />
+            <TasksListView
+              tasks={currentTasks}
+              subtasks={data.subtasks}
+              columns={currentColumns}
+              users={teamUsers}
+              labels={data.labels.filter((l) => l.projectId === currentProject.id)}
+              currentUser={effectiveCurrentUser}
+              onOpenTaskModal={handleOpenTaskModal}
+              onToggleSubtask={handleToggleSubtask}
+              onDeleteTask={handleDeleteTask}
+            />
+          </>
         )}
 
         {activeTab === 'calendar' && (
           <CalendarView
             projectId={currentProject.id}
+            canGenerateAi={rolePerms.canWriteTasks}
             tasks={currentTasks}
             milestones={currentMilestones}
             columns={currentColumns}
@@ -1545,7 +1638,7 @@ export default function StudyFlowHome() {
             coachingSessions={data.coachingSessions}
             currentUserId={effectiveCurrentUser.id}
             onOpenTaskModal={(t) => handleOpenTaskModal(t)}
-            onAddMilestone={handleAddMilestone}
+            onAddMilestones={handleAddMilestones}
             onUpdateMilestone={handleUpdateMilestone}
             onToggleMilestone={handleToggleMilestone}
             onDeleteMilestone={handleDeleteMilestone}
@@ -1554,6 +1647,7 @@ export default function StudyFlowHome() {
 
         {activeTab === 'chat' && (
           <ProjectChatView
+            onOpenAiAssistant={openAiAssistant}
             project={currentProject}
             messages={data.messages.filter((m) => m.channelId === currentProject.id)}
             users={teamUsers}
@@ -1574,6 +1668,8 @@ export default function StudyFlowHome() {
 
         {activeTab === 'coaching' && (
           <TrainingCoachingView
+            onOpenAiAssistant={() => openAiAssistant('coaching')}
+            project={currentProject}
             trainings={data.trainings}
             enrollments={data.enrollments}
             coachingSessions={data.coachingSessions}
@@ -1599,29 +1695,42 @@ export default function StudyFlowHome() {
         )}
 
         {activeTab === 'stats' && (
-          <ProjectStatsView
-            project={currentProject}
-            tasks={currentTasks}
-            columns={currentColumns}
-            users={teamUsers}
-            activities={currentActivities}
-            reports={data.reports.filter((r) => r.projectId === currentProject.id)}
-            onGenerateReport={handleGenerateReport}
-            onDeleteReport={handleDeleteReport}
-          />
-        )}
-
-        {activeTab === 'ai' && (
-          <AiCopilotView
-            project={currentProject}
-            tasks={currentTasks}
-            columns={currentColumns}
-            users={teamUsers}
-            subtasks={data.subtasks}
-            onCreateTaskFromAi={(taskData, subs) => handleSaveTask(taskData, subs)}
-          />
+          <>
+            <ProjectStatsView
+              project={currentProject}
+              tasks={currentTasks}
+              columns={currentColumns}
+              users={teamUsers}
+              activities={currentActivities}
+              reports={data.reports.filter((r) => r.projectId === currentProject.id)}
+              onGenerateReport={handleGenerateReport}
+              onDeleteReport={handleDeleteReport}
+            />
+            <AiCopilotView
+              key={`${currentProject.id}-stats`}
+              tools={['health', 'defense']}
+              project={currentProject}
+              tasks={currentTasks}
+              columns={currentColumns}
+              users={teamUsers}
+              subtasks={data.subtasks}
+              onCreateTaskFromAi={(taskData, subs) => handleSaveTask(taskData, subs)}
+              canGenerate={rolePerms.canWriteTasks}
+              onApplyGeneratedColumns={handleApplyGeneratedColumns}
+              onApplyGeneratedKanban={handleApplyGeneratedKanban}
+            />
+          </>
         )}
       </main>
+
+      <AiChatbot
+        projectId={currentProject.id}
+        projectName={currentProject.name}
+        module={aiChatModule}
+        isOpen={isAiChatOpen}
+        onOpen={() => openAiAssistant()}
+        onClose={() => setIsAiChatOpen(false)}
+      />
 
       {/* Modale CRUD Tâche */}
       {isModalOpen && (
