@@ -8,7 +8,7 @@ const STATIC_ASSETS = [
   '/favicon.ico',
 ];
 
-// Installation: Pré-mise en cache des assets statiques essentiels
+// Installation: Pré-mise en cache des assets statiques
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
