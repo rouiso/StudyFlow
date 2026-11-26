@@ -159,7 +159,7 @@ export const TrainingCoachingView: React.FC<TrainingCoachingViewProps> = ({
   const [trainingAiError, setTrainingAiError] = useState('');
   const [trainingAiMessage, setTrainingAiMessage] = useState('');
 
-  // État formulaire demande coaching
+  // État formulaire demande_coaching
   const [coachingTopic, setCoachingTopic] = useState('');
   const [selectedCoachId, setSelectedCoachId] = useState(
     users.find((u) => u.role === 'COACH')?.id || users[0]?.id || ''
