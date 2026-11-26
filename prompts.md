@@ -37,3 +37,7 @@ MEMBER	Oumaima Rouis	oumaimarouis58@gmail.com	[REDACTED]
 MEMBER	Iheb Kouki	iehb.kouki@esprit.tn	[REDACTED]
 COACH	Maysa Tebai	maysa.tebai@esprit.tn	[REDACTED]
 OWNER  Achref   achraflarousse52@gmail.com   [REDACTED]
+
+
+npm run dev
+npm run realtime
